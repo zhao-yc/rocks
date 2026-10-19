@@ -1,6 +1,6 @@
 # Rocks
 
-A small, free mobile browser without app ads, promotion slots or a news feed. Rocks prioritizes users in China, with Chinese default UI resources and English localization. Android uses Kotlin, Jetpack Compose and the system WebView. Native HarmonyOS uses ArkTS, ArkUI and ArkWeb.
+A small, free mobile browser without app ads, promotion slots or a news feed. Rocks prioritizes users in China, with Chinese default UI resources and a starting set of English resources. Android uses Kotlin, Jetpack Compose and the system WebView. Native HarmonyOS uses ArkTS, ArkUI and ArkWeb.
 
 **Early prototype, not a store-ready browser.** The source repository is public, but an open-source license has **not been selected**. Do not assume a license grant from repository visibility. There is no root `LICENSE` until the owner decides.
 
