@@ -1,0 +1,8 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "rocks",
+  "version": "0.1.0",
+  "description": "Rocks 原生鸿蒙浏览器工程，尚待 DevEco 编译验证",
+  "dependencies": {},
+  "devDependencies": {}
+}

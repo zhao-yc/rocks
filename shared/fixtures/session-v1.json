@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "activeTabId": "fixture-web",
+  "tabs": [
+    { "id": "fixture-home", "url": "", "title": "New tab" },
+    { "id": "fixture-web", "url": "https://example.com/", "title": "Example Domain" }
+  ],
+  "bookmarks": [
+    { "url": "https://example.com/", "title": "Example Domain", "timestamp": 1760000000000 }
+  ],
+  "history": [
+    { "url": "https://example.com/", "title": "Example Domain", "timestamp": 1760000000000 }
+  ],
+  "settings": { "searchEngine": "duckduckgo" }
+}
