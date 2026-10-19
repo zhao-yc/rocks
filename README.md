@@ -34,7 +34,7 @@ Requires JDK 17 and Android SDK packages `platform-tools`, `platforms;android-35
 
 On macOS/Linux, use `bash gradlew` with the same tasks. Baseline: AGP 8.9.2, Gradle 8.11.1, Kotlin 2.1.20, Compose BOM 2025.04.01, compile/target API 35. This is a reproducible prototype baseline, not a claim of current store-policy compliance. Wrapper and distribution checksums are pinned/verified.
 
-[Android CI](https://github.com/zhao-yc/rocks/actions/workflows/android.yml) runs unit tests, lint, debug APK generation and an emulator tab-flow smoke test. Debug APKs and reports are workflow artifacts, not Git files. Debug builds are for testing, not signed releases.
+[Android CI](https://github.com/zhao-yc/rocks/actions/workflows/android.yml) uses the runner's preinstalled SDK for unit tests, lint and debug APK generation. Emulator tab-flow checks require a manual run with the explicit SDK-license/download option enabled; they are not silently enabled. Debug APKs and reports are workflow artifacts, not Git files. Debug builds are for testing, not signed releases.
 
 ## Structure
 

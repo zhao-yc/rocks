@@ -99,7 +99,7 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         ToolButton(Icons.AutoMirrored.Filled.ArrowBack, activity.getString(R.string.back), status.back) { engine.back(active.id) }
                         ToolButton(Icons.AutoMirrored.Filled.ArrowForward, activity.getString(R.string.forward), status.forward) { engine.forward(active.id) }
-                        ToolButton(Icons.Default.Home, activity.getString(R.string.home)) { model.change { it.updateTab(it.activeTabId, "", activity.getString(R.string.new_tab)) } }
+                        ToolButton(Icons.Default.Home, activity.getString(R.string.home)) { engine.home(active.id); model.change { it.updateTab(it.activeTabId, "", activity.getString(R.string.new_tab)) } }
                         TextButton(modifier = Modifier.testTag("tabs-button"), onClick = { panel = "Tabs" }) { Text(activity.getString(R.string.tab_count, data.tabs.size)) }
                         Box {
                             ToolButton(Icons.Default.MoreHoriz, activity.getString(R.string.more_options)) { menu = true }

@@ -61,6 +61,7 @@ class BrowserEngine(
     }
 
     private fun updateStatus(id: String, web: WebView, progress: Int = web.progress) {
+        if (views[id] !== web) return
         statuses[id] = PageStatus(web.canGoBack(), web.canGoForward(), progress)
     }
 
@@ -75,6 +76,7 @@ class BrowserEngine(
         }
 
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+            if (views[id] !== view) return
             if (url != null && AddressResolver.isWebUrl(url)) {
                 requested[id] = url
                 model.change { it.updateTab(id, url) }
@@ -83,6 +85,7 @@ class BrowserEngine(
         }
 
         override fun onPageFinished(view: WebView, url: String?) {
+            if (views[id] !== view || (url != null && requested[id] != url)) return
             if (url != null && AddressResolver.isWebUrl(url)) {
                 requested[id] = url
                 model.change { it.recordVisit(id, url, view.title?.take(512) ?: url, System.currentTimeMillis()) }
@@ -91,6 +94,7 @@ class BrowserEngine(
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+            if (views[id] !== view) return
             if (url != null && AddressResolver.isWebUrl(url)) {
                 requested[id] = url
                 model.change { it.updateTab(id, url) }
@@ -120,6 +124,7 @@ class BrowserEngine(
 
         override fun onReceivedTitle(view: WebView, title: String?) {
             val url = view.url ?: return
+            if (views[id] !== view || requested[id] != url) return
             if (AddressResolver.isWebUrl(url)) model.change { it.updateTab(id, url, title?.take(512) ?: url) }
         }
 
@@ -152,7 +157,10 @@ class BrowserEngine(
     fun back(id: String) { views[id]?.takeIf { it.canGoBack() }?.goBack() }
     fun forward(id: String) { views[id]?.takeIf { it.canGoForward() }?.goForward() }
     fun reload(id: String) { views[id]?.reload() }
-    fun stop(id: String) { views[id]?.stopLoading() }
+    fun stop(id: String) { views[id]?.let { it.stopLoading(); updateStatus(id, it, 100) } }
+
+    /** 先释放引擎再进入首页，避免旧页面的延迟回调恢复已关闭的内容。 */
+    fun home(id: String) { dispose(id) }
 
     fun exitFullScreen() {
         fullScreen = null

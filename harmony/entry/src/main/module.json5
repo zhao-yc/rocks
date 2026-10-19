@@ -1,6 +1,6 @@
 {
   "module": {
-    "name": "entry", "type": "entry", "srcEntry": "./ets/entryability/EntryAbility.ets",
+    "name": "entry", "type": "entry",
     "description": "$string:module_desc", "mainElement": "EntryAbility",
     "deviceTypes": ["phone"], "deliveryWithInstall": true, "installationFree": false,
     "pages": "$profile:main_pages",

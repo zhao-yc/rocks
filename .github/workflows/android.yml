@@ -3,6 +3,12 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      run_emulator:
+        description: 'Run emulator tests (downloads SDK/system images and accepts their SDK licenses)'
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -18,10 +24,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
-      - name: Install pinned SDK packages
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Check preinstalled SDK packages
+        run: |
+          test -d "$ANDROID_HOME/platforms/android-35"
+          test -d "$ANDROID_HOME/build-tools/35.0.0"
       - name: Unit tests, lint and debug APK
         run: bash gradlew :core:test :android:app:testDebugUnitTest :android:app:lintDebug :android:app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
@@ -38,6 +45,7 @@ jobs:
           retention-days: 14
   smoke:
     needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.run_emulator
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
