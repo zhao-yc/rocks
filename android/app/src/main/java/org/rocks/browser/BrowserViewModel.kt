@@ -59,7 +59,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun navigate(input: String) {
         val target = AddressResolver.resolve(input, SearchEngine.fromId(data.settings.searchEngine))
-        if (target.url != null) change { it.updateTab(it.activeTabId, target.url, target.url) }
+        val url = target.url
+        if (url != null) change { it.updateTab(it.activeTabId, url, url) }
         else notice = target.error
     }
 

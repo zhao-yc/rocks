@@ -1,7 +1,9 @@
 name: Android
 on:
   push:
+    paths-ignore: ['docs/**', '**/*.md', 'harmony/**', 'THIRD_PARTY_NOTICES.md']
   pull_request:
+    paths-ignore: ['docs/**', '**/*.md', 'harmony/**', 'THIRD_PARTY_NOTICES.md']
   workflow_dispatch:
     inputs:
       run_emulator:
@@ -29,8 +31,12 @@ jobs:
         run: |
           test -d "$ANDROID_HOME/platforms/android-35"
           test -d "$ANDROID_HOME/build-tools/35.0.0"
-      - name: Unit tests, lint and debug APK
-        run: bash gradlew :core:test :android:app:testDebugUnitTest :android:app:lintDebug :android:app:assembleDebug --stacktrace
+      - name: Unit tests
+        run: bash gradlew :core:test :android:app:testDebugUnitTest --stacktrace
+      - name: Android lint
+        run: bash gradlew :android:app:lintDebug --stacktrace
+      - name: Build debug and test APKs
+        run: bash gradlew :android:app:assembleDebug :android:app:assembleDebugAndroidTest --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()
         with:
