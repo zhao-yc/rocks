@@ -61,7 +61,7 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer); engine.destroy() }
     }
-    SideEffect { engine.prune(data.tabs) }
+    SideEffect { engine.prune(data.tabs); engine.syncActive() }
     BackHandler(enabled = engine.fullScreen != null || panel != null || status.back) {
         when { engine.fullScreen != null -> engine.exitFullScreen(); panel != null -> panel = null
             else -> engine.back(active.id) }

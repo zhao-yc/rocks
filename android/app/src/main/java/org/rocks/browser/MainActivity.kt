@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
         if (!AddressResolver.isWebUrl(url)) return
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"; putExtra(Intent.EXTRA_TEXT, url)
-        }, "Share page"))
+        }, getString(R.string.share_page)))
     }
 
     /** 系统下载仅在用户确认后启动，文件名清理且加时间前缀避免覆盖。 */

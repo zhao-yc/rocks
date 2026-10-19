@@ -56,7 +56,7 @@ class BrowserEngine(
             requested[tab.id] = tab.url
             web.loadUrl(tab.url)
         }
-        views.forEach { (id, view) -> if (id == tab.id && resumed) view.onResume() else view.onPause() }
+        syncActive()
         return web
     }
 
@@ -171,8 +171,13 @@ class BrowserEngine(
     /** Activity 暂停时暂停全部标签，关闭标签时立即释放原生资源。 */
     fun setResumed(value: Boolean) {
         resumed = value
-        views.forEach { (id, view) -> if (value && id == model.data.activeTabId) view.onResume() else view.onPause() }
+        syncActive()
         if (!value) CookieManager.getInstance().flush()
+    }
+
+    /** 新建空白标签时同样暂停旧页面，不能依赖新 WebView 的创建回调。 */
+    fun syncActive() {
+        views.forEach { (id, view) -> if (resumed && id == model.data.activeTabId) view.onResume() else view.onPause() }
     }
 
     fun prune(tabs: List<BrowserTab>) {
