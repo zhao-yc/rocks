@@ -9,6 +9,7 @@ A small, free mobile browser without app ads, promotion slots or a news feed. Ro
 Android 10 / API 29 and newer:
 
 - Minimal home, bottom address/search bar, back/forward, reload/stop and tab overview.
+- Safari-inspired interactions on Android: tap the compact address bar to edit the full URL, cancel without navigating, swipe it to select adjacent tabs, and manage tabs in a full-screen card grid. Long-press the tab button for new/close/close-other actions; share and bookmarks are directly available on the bottom toolbar.
 - Up to 24 normal tabs. In-memory WebView back/forward stacks remain separate per tab.
 - Local restore of tab URLs, selection, bookmarks, bounded history and search preference. Form contents, scroll positions and back/forward stacks are not restored after process death.
 - Bing China by default; Baidu, DuckDuckGo and Google are optional. Availability depends on the network.
@@ -51,6 +52,8 @@ See [中文方案](docs/方案.md), [verification](docs/验证记录.md), [accep
 ## Privacy boundaries
 
 Normal tabs share WebView cookies and website storage. Session files stay in app-private storage; Android backup is disabled. Clearing history clears URL history only, not cookies, cache, open tabs or downloads. DownloadManager is an OS service with its own download records. No telemetry SDK or native JavaScript bridge is added.
+
+Android session reads and writes are limited to 4 MiB of UTF-8. Unreadable, malformed, oversized or unknown-version sessions remain protected from subsequent saves; browsing continues in memory with a restore warning. Failed writes allow later snapshots to retry through AtomicFile.
 
 ## References
 

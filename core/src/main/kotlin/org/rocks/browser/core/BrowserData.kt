@@ -50,6 +50,16 @@ data class BrowserData(
 
     fun selectTab(id: String) = if (tabs.any { it.id == id }) copy(activeTabId = id) else this
 
+    /** 地址栏横划只切换相邻标签，到达两端时停留，不循环或隐式新建。 */
+    fun selectAdjacentTab(next: Boolean): BrowserData {
+        val index = tabs.indexOfFirst { it.id == activeTabId }
+        if (index < 0) return this
+        val neighbor = tabs.getOrNull(index + if (next) 1 else -1) ?: return this
+        return selectTab(neighbor.id)
+    }
+
+    fun closeOtherTabs(): BrowserData = copy(tabs = listOf(activeTab), activeTabId = activeTab.id)
+
     fun updateTab(id: String, url: String, title: String? = null): BrowserData = copy(
         tabs = tabs.map { if (it.id == id) it.copy(url = url, title = title ?: it.title) else it },
     )

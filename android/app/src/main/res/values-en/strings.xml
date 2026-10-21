@@ -1,5 +1,10 @@
 <resources>
     <string name="tabs">Tabs</string>
+    <string name="done">Done</string>
+    <string name="clear_address">Clear address</string>
+    <string name="tab_actions">Tab actions</string>
+    <string name="close_current_tab">Close current tab</string>
+    <string name="close_other_tabs">Close other tabs</string>
     <string name="app_name">Rocks</string>
     <string name="search_hint">Search or enter address</string>
     <string name="stop_loading">Stop loading</string>
