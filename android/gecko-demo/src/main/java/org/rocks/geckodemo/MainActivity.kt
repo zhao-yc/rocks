@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun BrowserScreen(model: BrowserModel) {
     val context = LocalContext.current
+    val shareLabel = stringResource(R.string.share)
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var showExtensions by remember { mutableStateOf(false) }
@@ -207,7 +208,7 @@ private fun BrowserScreen(model: BrowserModel) {
                             ToolIcon(Icons.Outlined.Share, R.string.share, {
                                 context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"; putExtra(Intent.EXTRA_TEXT, current.url)
-                                }, context.getString(R.string.share)))
+                                }, shareLabel))
                             }, DemoPolicy.isWebUrl(current.url))
                             BadgedBox(badge = { Badge { Text(model.tabs.size.toString()) } }) {
                                 ToolIcon(Icons.Outlined.Tab, R.string.tabs, { showTabs = true })
