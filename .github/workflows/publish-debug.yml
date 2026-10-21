@@ -15,8 +15,8 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      SOURCE_RUN: '39592307778'
-      SOURCE_SHA: 'e9116b6942a875ec74321033cae63896646077d9'
+      SOURCE_RUN: '39595261945'
+      SOURCE_SHA: '218549ad684ae4a4346dfd8285016742a6fced9f'
     steps:
       - name: Verify source build and download its APK
         run: |
@@ -36,39 +36,47 @@ jobs:
           assert diff["status"] in ("ahead", "identical"), "Unexpected publish commit ancestry"
           assert all(f["filename"] == ".github/workflows/publish-debug.yml" for f in diff["files"]), "Runtime source changed since build"
           PY
-          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name rocks-debug-apk --dir "$RUNNER_TEMP/rocks-apk"
+          mkdir -p "$RUNNER_TEMP/rocks-apk"
+          curl --fail --location --retry 3 --max-time 180 https://tmpfiles.org/dl/wxAHMjg92CS7/rocks-0.2.2-debug.apk --output "$RUNNER_TEMP/rocks-apk/rocks-0.2.2-debug.apk"
+          cd "$RUNNER_TEMP/rocks-apk"
+          echo "4cdc10bba644b44485d0260d7bff5969317ac5ea096008056e284b40c4139f33  rocks-0.2.2-debug.apk" | sha256sum --check --strict
       - name: Verify APK identity and signature
         run: |
           cd "$RUNNER_TEMP/rocks-apk"
-          mv app-debug.apk rocks-0.2.1-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs rocks-0.2.1-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging rocks-0.2.1-debug.apk > "$RUNNER_TEMP/apk-badging.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs rocks-0.2.2-debug.apk | tee "$RUNNER_TEMP/apk-certs.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging rocks-0.2.2-debug.apk > "$RUNNER_TEMP/apk-badging.txt"
           python3 - <<'PY'
           import os
           from pathlib import Path
+          import re
+          certs = (Path(os.environ["RUNNER_TEMP"]) / "apk-certs.txt").read_text()
+          assert re.findall(r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)$", certs, re.M) == ["61fd4f1cf391cb98b53030f008aa0dd57dae4a91fac1bf3525f8db013065acaf"], "Signing certificate mismatch"
           package = (Path(os.environ["RUNNER_TEMP"]) / "apk-badging.txt").read_text().splitlines()[0]
           assert "name='org.rocks.browser'" in package, package
-          assert "versionCode='3'" in package, package
-          assert "versionName='0.2.1-dev'" in package, package
+          assert "versionCode='4'" in package, package
+          assert "versionName='0.2.2-dev'" in package, package
           print(package)
           PY
-          sha256sum rocks-0.2.1-debug.apk > rocks-0.2.1-debug.apk.sha256
-          cat rocks-0.2.1-debug.apk.sha256
+          sha256sum rocks-0.2.2-debug.apk > rocks-0.2.2-debug.apk.sha256
+          cat rocks-0.2.2-debug.apk.sha256
       - name: Publish public testing release
         run: |
           cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
-          Android 10+ debug 测试版，版本 0.2.1-dev。
-          
+          Android 10+ debug 测试版，版本 0.2.2-dev。
+
+          - 使用已保留的固定开发签名；已验证两次独立 CI 构建在本地用同一私钥签名后结果一致。CI Secret 配置尚待完成。
           - 修复网页自动唤起 App、iframe 和自动弹窗反复打断阅读：自动请求静默拦截，主动点击未知链接仅轻提示。
           - 支持的电话/邮件等链接仍需手势和确认，切换标签或离开应用时撤销未处理的确认。
           - 保留 Rocks 苔绿和暖纸色 UI。
           - 底部地址编辑与横划切换、卡片标签总览、标签快捷操作。
           - 链接长按前台/后台打开、复制与分享；书签、历史、搜索、下载、上传和视频全屏。
           - Android 单元测试、lint、应用及测试 APK 编译通过。未完成真机验收。
-          
-          下载 rocks-0.2.1-debug.apk 安装；sha256 文件用于核对文件完整性。
-          安装说明：本调试包签名与 0.2.0-dev 不同，不能直接覆盖旧版；卸载旧版会清空其本地浏览数据。
-          源码提交：e9116b6942a875ec74321033cae63896646077d9。
+
+          下载 rocks-0.2.2-debug.apk 安装；sha256 文件用于核对文件完整性。
+          安装说明：本包使用固定开发签名，与 0.2.0/0.2.1-dev 不同。首次迁移须卸载旧版，会清空其本地浏览数据；请先保存重要数据。
+          源码提交：218549ad684ae4a4346dfd8285016742a6fced9f。
           NOTES
           cd "$RUNNER_TEMP/rocks-apk"
-          gh release create v0.2.1-dev rocks-0.2.1-debug.apk rocks-0.2.1-debug.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Rocks 0.2.1-dev" --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md"
+          gh release view v0.2.2-dev --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' | python3 -c 'import sys; assert sys.stdin.read().strip() == "true", "Release is already public"'
+          gh release upload v0.2.2-dev rocks-0.2.2-debug.apk rocks-0.2.2-debug.apk.sha256 --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit v0.2.2-dev --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Rocks 0.2.2-dev" --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md" --draft=false
