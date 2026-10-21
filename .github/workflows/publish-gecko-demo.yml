@@ -38,9 +38,24 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/rocks-gecko"
           cd "$RUNNER_TEMP/rocks-gecko"
-          curl --fail --location --retry 2 --max-time 120 'https://tmpfiles.org/dl/1792592909.2a3b762f5e640c82/wwA9MkZGrnn1/rocks-gecko-1.bin' --output part-1.bin
-          curl --fail --location --retry 2 --max-time 120 'https://tmpfiles.org/dl/1792592909.3546da9a997df2e5/wRAOMAZLr9UG/rocks-gecko-2.bin' --output part-2.bin
-          curl --fail --location --retry 2 --max-time 120 'https://tmpfiles.org/dl/1792592909.36e0356a8937a0e5/wsAKMKZvr7Va/rocks-gecko-3.bin' --output part-3.bin
+          python3 - <<'PYCODE'
+          import re, subprocess, urllib.parse, urllib.request
+          pages = [
+              'https://tmpfiles.org/wwA9MkZGrnn1/rocks-gecko-1.bin',
+              'https://tmpfiles.org/wRAOMAZLr9UG/rocks-gecko-2.bin',
+              'https://tmpfiles.org/wsAKMKZvr7Va/rocks-gecko-3.bin',
+          ]
+          for i, page in enumerate(pages, 1):
+              with urllib.request.urlopen(page, timeout=30) as response:
+                  html = response.read(1024 * 1024).decode('utf-8')
+              match = re.search(r'class="download" href="([^"]+)"', html)
+              assert match, 'Transfer page did not provide a download'
+              direct = match.group(1)
+              parsed = urllib.parse.urlparse(direct)
+              assert parsed.scheme == 'https' and parsed.netloc == 'tmpfiles.org'
+              assert re.fullmatch(r'/dl/[A-Za-z0-9/._-]+', parsed.path)
+              subprocess.run(['curl', '--fail', '--location', '--retry', '2', '--max-time', '120', direct, '--output', f'part-{i}.bin'], check=True)
+          PYCODE
           cat part-1.bin part-2.bin part-3.bin > rocks-gecko-demo-0.1.0.apk
           echo '742aec33cf2de22db9301db2c4da0af3851b09b2f29aaed6a024da2f10b78a43  rocks-gecko-demo-0.1.0.apk' > rocks-gecko-demo-0.1.0.apk.sha256
           sha256sum --check --strict rocks-gecko-demo-0.1.0.apk.sha256
