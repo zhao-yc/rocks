@@ -1,10 +1,15 @@
 package org.rocks.geckodemo
 
+import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -39,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -76,17 +82,58 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BrowserScreen(model: BrowserModel) {
+    if (model.restoring) {
+        Surface(Modifier.fillMaxSize()) { Box(contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+        return
+    }
     val context = LocalContext.current
     val shareLabel = stringResource(R.string.share)
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var showExtensions by remember { mutableStateOf(false) }
     var showTabs by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    var library by remember { mutableStateOf<LibraryPage?>(null) }
+    val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val data = result.data
+        val uris = if (result.resultCode != Activity.RESULT_OK) emptyList() else
+            data?.clipData?.let { clip -> (0 until clip.itemCount).map { clip.getItemAt(it).uri } } ?: listOfNotNull(data?.data)
+        model.files.completeUpload(uris)
+    }
+    val downloadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        model.files.completeDownload(if (result.resultCode == Activity.RESULT_OK) result.data?.data else null)
+    }
+    LaunchedEffect(model.files.upload) {
+        model.files.upload?.let { request ->
+            if (!request.launched) {
+                request.launched = true
+                val types = request.prompt.mimeTypes.orEmpty().filter { it.matches(Regex("[a-zA-Z0-9.+_*-]+/[a-zA-Z0-9.+_*-]+")) }
+                runCatching { uploadLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = types.singleOrNull() ?: "*/*"
+                    if (types.isNotEmpty()) putExtra(Intent.EXTRA_MIME_TYPES, types.toTypedArray())
+                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, request.prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }) }.onFailure { model.files.completeUpload(emptyList()); model.notify(R.string.file_failed) }
+            }
+        }
+    }
+    LaunchedEffect(model.files.destination) {
+        model.files.destination?.let { request ->
+            if (!request.launched) {
+                request.launched = true
+                runCatching { downloadLauncher.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE); type = request.mime
+                    putExtra(Intent.EXTRA_TITLE, request.filename)
+                }) }.onFailure { model.files.completeDownload(null); model.notify(R.string.file_failed) }
+            }
+        }
+    }
     var editing by remember { mutableStateOf(false) }
     var address by remember { mutableStateOf(TextFieldValue()) }
     val focusRequester = remember { FocusRequester() }
     val current = model.current
-    val pager = rememberPagerState(pageCount = { model.tabs.size })
+    val pager = rememberPagerState(initialPage = model.tabs.indexOf(current).coerceAtLeast(0), pageCount = { model.tabs.size })
     var contentWidth by remember { mutableFloatStateOf(1f) }
     var addressWidth by remember { mutableFloatStateOf(1f) }
     var gestureStart by remember { mutableIntStateOf(0) }
@@ -97,11 +144,6 @@ private fun BrowserScreen(model: BrowserModel) {
     LaunchedEffect(model.selectedId, model.tabs.size) {
         val index = model.tabs.indexOfFirst { it.id == model.selectedId }
         if (index >= 0 && pager.settledPage != index && !pager.isScrollInProgress) pager.animateScrollToPage(index)
-    }
-    LaunchedEffect(pager) {
-        snapshotFlow { pager.settledPage }.collect { index ->
-            if (!pager.isScrollInProgress) model.tabs.getOrNull(index)?.let { model.selectTab(it.id) }
-        }
     }
     LaunchedEffect(model.notice) {
         model.notice?.let { message ->
@@ -132,15 +174,28 @@ private fun BrowserScreen(model: BrowserModel) {
                     Text(stringResource(R.string.demo_badge), Modifier.padding(start = 8.dp),
                         color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                     Spacer(Modifier.weight(1f))
+                    ToolIcon(if (model.bookmarks.any { it.url == current.url }) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
+                        R.string.bookmark_current, model::toggleBookmark, DemoPolicy.isWebUrl(current.url))
                     ToolIcon(Icons.Outlined.Extension, R.string.extensions, { showExtensions = true })
+                    Box {
+                        ToolIcon(Icons.Outlined.MoreVert, R.string.more, { showMenu = true })
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            LibraryPage.entries.forEach { page ->
+                                DropdownMenuItem(text = { Text(stringResource(page.label)) }, onClick = { showMenu = false; library = page })
+                            }
+                        }
+                    }
                 }
+            }
+            if (model.storageReadOnly || model.saveFailed) Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                Text(stringResource(if (model.storageReadOnly) R.string.restore_failed else R.string.save_failed), Modifier.padding(10.dp), style = MaterialTheme.typography.bodySmall)
             }
             Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged { contentWidth = it.width.toFloat() }) {
                 HorizontalPager(state = pager, userScrollEnabled = false, beyondViewportPageCount = 1,
                     key = { model.tabs[it].id }, modifier = Modifier.fillMaxSize()) { index ->
                     val tab = model.tabs.getOrNull(index)
                     if (tab != null) {
-                        if (tab.url == DemoPolicy.HOME) HomeScreen(
+                        if (tab.url == DemoPolicy.HOME) HomeScreen(model,
                             onOpen = { model.navigate(it) },
                             onExtensions = { showExtensions = true },
                         ) else GeckoPage(tab.session, Modifier.fillMaxSize())
@@ -225,24 +280,33 @@ private fun BrowserScreen(model: BrowserModel) {
             ExtensionManager(model, onOpen = { extension -> showExtensions = false; model.openExtension(extension) })
         }
     }
-    if (showTabs) {
-        ModalBottomSheet(onDismissRequest = { showTabs = false }) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.tabs), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = { model.newTab(DemoPolicy.HOME); showTabs = false }) {
-                    Icon(Icons.Outlined.Add, null); Text(stringResource(R.string.new_tab))
-                }
-            }
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp).padding(bottom = 24.dp)) {
-                items(model.tabs.toList(), key = { it.id }) { tab ->
-                    ListItem(headlineContent = { Text(tab.title.ifBlank { displayAddress(tab.url) }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        supportingContent = { Text(displayAddress(tab.url), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        leadingContent = { RadioButton(selected = tab.id == model.selectedId, onClick = { model.selectTab(tab.id); showTabs = false }) },
-                        trailingContent = { ToolIcon(Icons.Outlined.Close, R.string.close_tab, { model.closeTab(tab.id) }) },
-                        modifier = Modifier.clickable { model.selectTab(tab.id); showTabs = false })
-                }
-            }
+    if (showTabs) TabOverview(model) { showTabs = false }
+    library?.let { page ->
+        ModalBottomSheet(onDismissRequest = { library = null }) {
+            LibraryPanel(model, page) { library = null }
         }
+    }
+    model.linkMenu?.let { target ->
+        AlertDialog(onDismissRequest = { model.linkMenu = null }, title = { Text(target.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            text = { Column {
+                Text(target.url, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { model.openLink(false) }) { Text(stringResource(R.string.open_new_tab)) }
+                TextButton(onClick = { model.openLink(true) }) { Text(stringResource(R.string.open_background)) }
+                TextButton(onClick = {
+                    (context.getSystemService(ClipboardManager::class.java)).setPrimaryClip(ClipData.newPlainText("Rocks", target.url))
+                    model.linkMenu = null; model.notify(R.string.link_copied)
+                }) { Text(stringResource(R.string.copy_link)) }
+                TextButton(onClick = {
+                    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, target.url) }, shareLabel))
+                    model.linkMenu = null
+                }) { Text(stringResource(R.string.share)) }
+            } }, confirmButton = { TextButton(onClick = { model.linkMenu = null }) { Text(stringResource(R.string.cancel)) } })
+    }
+    model.files.offer?.let { offer ->
+        AlertDialog(onDismissRequest = { model.files.confirmDownload(false) }, title = { Text(stringResource(R.string.save_download)) },
+            text = { Text(stringResource(R.string.download_confirm, offer.filename)) },
+            confirmButton = { TextButton(onClick = { model.files.confirmDownload(true) }) { Text(stringResource(R.string.save_file)) } },
+            dismissButton = { TextButton(onClick = { model.files.confirmDownload(false) }) { Text(stringResource(R.string.cancel)) } })
     }
     model.popup?.let { popup ->
         ModalBottomSheet(onDismissRequest = model::closePopup, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
@@ -250,7 +314,7 @@ private fun BrowserScreen(model: BrowserModel) {
                 Text(popup.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 ToolIcon(Icons.Outlined.Close, R.string.close_panel, model::closePopup)
             }
-            GeckoPage(popup.session, Modifier.fillMaxWidth().height(440.dp))
+            GeckoPage(popup.session, Modifier.fillMaxWidth().height((LocalConfiguration.current.screenHeightDp * 0.55f).coerceIn(180f, 500f).dp))
         }
     }
     model.question?.let { question ->
@@ -274,7 +338,7 @@ private fun GeckoPage(session: GeckoSession, modifier: Modifier) {
 }
 
 @Composable
-private fun HomeScreen(onOpen: (String) -> Unit, onExtensions: () -> Unit) {
+private fun HomeScreen(model: BrowserModel, onOpen: (String) -> Unit, onExtensions: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Spacer(Modifier.height(12.dp))
@@ -288,6 +352,11 @@ private fun HomeScreen(onOpen: (String) -> Unit, onExtensions: () -> Unit) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.gesture_title), fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.gesture_body))
+            }
+        }
+        model.bookmarks.take(6).forEach { record ->
+            OutlinedButton(onClick = { onOpen(record.url) }, Modifier.fillMaxWidth()) {
+                Text(record.title.ifBlank { record.url }, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         Text(stringResource(R.string.try_pages), style = MaterialTheme.typography.titleMedium)
@@ -307,7 +376,9 @@ private fun ExtensionManager(model: BrowserModel, onOpen: (org.mozilla.geckoview
         Text(stringResource(R.string.extensions), style = MaterialTheme.typography.headlineSmall)
         Text(stringResource(R.string.extensions_intro), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (!model.extensionsReady) LinearProgressIndicator(Modifier.fillMaxWidth())
-        addonCatalog.forEach { choice ->
+        val installedOnly = model.extensions.filter { ext -> addonCatalog.none { it.id == ext.id } }
+        val choices = addonCatalog + installedOnly.map { AddonChoice(it.id, it.metaData?.name ?: it.id, R.string.other_extension_description, null) }
+        choices.forEach { choice ->
             val extension = model.extensions.firstOrNull { it.id == choice.id }
             val enabled = extension?.metaData?.enabled == true
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
@@ -319,7 +390,7 @@ private fun ExtensionManager(model: BrowserModel, onOpen: (org.mozilla.geckoview
                             onCheckedChange = { model.setEnabled(extension, it) })
                     }
                     Text(stringResource(choice.description), style = MaterialTheme.typography.bodySmall)
-                    Text(if (choice.uri == null) stringResource(R.string.bundled_source) else stringResource(R.string.mozilla_source),
+                    Text(if (choice.id == DemoPolicy.PAPER_ID) stringResource(R.string.bundled_source) else stringResource(R.string.mozilla_source),
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     if (model.busyId == choice.id) {
                         LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -331,6 +402,9 @@ private fun ExtensionManager(model: BrowserModel, onOpen: (org.mozilla.geckoview
                     } else {
                         Text(stringResource(if (enabled) R.string.enabled_version else R.string.disabled_version, extension.metaData?.version.orEmpty()),
                             style = MaterialTheme.typography.labelSmall)
+                        if (!extension.isBuiltIn) TextButton(onClick = { model.updateExtension(extension) }, enabled = model.busyId == null) {
+                            Text(stringResource(R.string.check_update))
+                        }
                         Row {
                             FilledTonalButton(onClick = { onOpen(extension) }, enabled = enabled && model.busyId == null) {
                                 Text(stringResource(R.string.open_panel))

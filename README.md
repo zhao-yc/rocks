@@ -1,10 +1,14 @@
 # Rocks
 
-A small, free mobile browser without app ads, promotion slots or a news feed. Rocks prioritizes users in China, with Chinese default UI resources and a starting set of English resources. Android uses Kotlin, Jetpack Compose and the system WebView. Native HarmonyOS uses ArkTS, ArkUI and ArkWeb.
+A small, free mobile browser without app ads, promotion slots or a news feed. Rocks prioritizes users in China, with Chinese default UI resources and a starting set of English resources. Android development now follows Kotlin, Jetpack Compose and GeckoView in the standalone `android/gecko-demo` project. The earlier system WebView application remains available for regression checks. Native HarmonyOS uses ArkTS, ArkUI and ArkWeb.
 
 **Early prototype, not a store-ready browser.** The source repository is public, but an open-source license has **not been selected**. Do not assume a license grant from repository visibility. There is no root `LICENSE` until the owner decides.
 
-## Current scope
+## Gecko development preview
+
+The accepted browser direction is GeckoView with Firefox WebExtensions and the Rocks interface. See [Gecko build and feature notes](android/gecko-demo/README.md). The 0.2 preview keeps the demo application ID and fixed certificate so it can update the installed 0.1 preview. It adds URL/session restoration, bookmarks, bounded history, search settings, native document-picker downloads/uploads, link menus and explicit extension update checks. The original WebView app uses a separate package and data store.
+
+## Original WebView scope
 
 Android 10 / API 29 and newer:
 

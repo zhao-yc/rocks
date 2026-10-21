@@ -1,4 +1,5 @@
 pluginManagement {
+    plugins { kotlin("jvm") version "2.4.0" }
     repositories { google(); mavenCentral(); gradlePluginPortal() }
 }
 dependencyResolutionManagement {
@@ -11,3 +12,5 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "rocks-gecko-demo"
+include(":core")
+project(":core").projectDir = file("../../core")

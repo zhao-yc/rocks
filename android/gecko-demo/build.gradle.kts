@@ -11,8 +11,8 @@ android {
         applicationId = "org.rocks.browser.geckodemo"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-gecko"
+        versionCode = 2
+        versionName = "0.2.0-gecko"
         ndk { abiFilters += "arm64-v8a" }
     }
     buildFeatures { compose = true }
@@ -40,7 +40,19 @@ android {
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 
+// Compile the already tested portable codec and atomic repository without importing WebView UI.
+kotlin.sourceSets.getByName("main").kotlin.apply {
+    srcDir("../app/src/main/java")
+    include("org/rocks/geckodemo/**", "org/rocks/browser/SessionCodec.kt",
+        "org/rocks/browser/SessionRepository.kt", "org/rocks/browser/AtomicSessionFile.kt")
+}
+kotlin.sourceSets.getByName("test").kotlin.apply {
+    srcDir("../app/src/test/java")
+    include("org/rocks/geckodemo/**", "org/rocks/browser/SessionCodecTest.kt", "org/rocks/browser/SessionRepositoryTest.kt")
+}
+
 dependencies {
+    implementation(project(":core"))
     implementation("org.mozilla.geckoview:geckoview:158.0.20261021001945")
     implementation(platform("androidx.compose:compose-bom:2025.04.01"))
     implementation("androidx.activity:activity-compose:1.10.1")
@@ -48,4 +60,5 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

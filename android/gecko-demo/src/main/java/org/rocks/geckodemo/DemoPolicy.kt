@@ -3,31 +3,22 @@ package org.rocks.geckodemo
 import java.net.URI
 import java.net.URLEncoder
 import kotlin.math.abs
+import org.rocks.browser.core.AddressResolver
+import org.rocks.browser.core.SearchEngine
 
 internal object DemoPolicy {
     const val HOME = "about:blank"
     const val PAPER_ID = "paper@rocks.demo"
     const val DARK_READER_ID = "addon@darkreader.org"
-    const val MAX_TABS = 8
+    const val MAX_TABS = 24
 
-    fun isWebUrl(value: String): Boolean = runCatching {
-        val uri = URI(value)
-        uri.scheme?.lowercase() in setOf("http", "https") &&
-            !uri.host.isNullOrEmpty() && uri.rawUserInfo == null &&
-            value.length <= 16384 && value.none { it.isISOControl() }
-    }.getOrDefault(false)
+    fun isWebUrl(value: String): Boolean = AddressResolver.isWebUrl(value)
 
-    fun inputUrl(text: String): String? {
-        val input = text.trim()
-        if (input.isEmpty() || input.length > 16384) return null
-        if (isWebUrl(input)) return input
-        if (Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:").containsMatchIn(input)) return null
-        if (!input.any(Char::isWhitespace) && input.contains('.')) {
-            val candidate = "https://$input"
-            if (isWebUrl(candidate)) return candidate
-        }
-        return "https://www.baidu.com/s?wd=" + URLEncoder.encode(input, "UTF-8")
-    }
+    fun inputUrl(text: String, search: SearchEngine = SearchEngine.BING): String? =
+        AddressResolver.resolve(text, search).url
+
+    fun safeFilename(name: String?): String = name.orEmpty().substringAfterLast('/').substringAfterLast('\\')
+        .replace(Regex("[\\p{Cntrl}:*?\"<>|]"), "_").trim().trim('.').take(120).ifBlank { "download" }
 
     fun canLoad(value: String, extensionBase: String? = null): Boolean =
         value == HOME || isWebUrl(value) ||

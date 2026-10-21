@@ -7,6 +7,18 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import java.io.File
+import org.rocks.browser.AtomicSessionFile
+import org.rocks.browser.SessionRepository
+import org.rocks.browser.core.BrowserData
+import org.rocks.browser.core.BrowserSettings
+import org.rocks.browser.core.BrowserTab as StoredTab
+import org.rocks.browser.core.PageRecord
+import org.rocks.browser.core.SearchEngine
+import org.mozilla.geckoview.WebResponse
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -21,11 +33,13 @@ internal class BrowserTab(val id: Long, val session: GeckoSession, val extension
     var canGoBack by mutableStateOf(false)
     var canGoForward by mutableStateOf(false)
     var error by mutableStateOf(false)
+    var pendingUrl: String? = null
 }
 
 internal data class ExtensionPopup(val session: GeckoSession, val extensionId: String, val title: String)
 internal data class PermissionQuestion(val title: String, val body: String, val answer: (Boolean) -> Unit)
 internal data class AddonChoice(val id: String, val name: String, val description: Int, val uri: String?)
+internal data class LinkTarget(val tabId: Long, val url: String, val title: String)
 
 internal val addonCatalog = listOf(
     AddonChoice(DemoPolicy.PAPER_ID, "Rocks Paper", R.string.paper_description, null),
@@ -62,6 +76,22 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     private var foreground = true
     private var pendingInstall: GeckoResult<WebExtension>? = null
     private var disposed = false
+    var restoring by mutableStateOf(true)
+        private set
+    var storageReadOnly by mutableStateOf(false)
+        private set
+    var saveFailed by mutableStateOf(false)
+        private set
+    val bookmarks = mutableStateListOf<PageRecord>()
+    val history = mutableStateListOf<PageRecord>()
+    var searchEngine by mutableStateOf(SearchEngine.BING)
+        private set
+    var linkMenu by mutableStateOf<LinkTarget?>(null)
+    private val storage = (application as DemoApplication).storage
+    private var saveJob: Job? = null
+    val files = BrowserFiles(application, viewModelScope, { session ->
+        tabs.firstOrNull { it.session === session && it.id == selectedId && !restoring && !disposed }?.url
+    }, ::notify)
 
     private fun text(id: Int, vararg args: Any) = getApplication<Application>().getString(id, *args)
     fun notify(id: Int) { notice = text(id) }
@@ -222,7 +252,10 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                 return if (allowed) GeckoResult.allow() else GeckoResult.deny()
             }
             override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
-                if (url != null) tab.url = url
+                if (url != null) {
+                    if (tab.url != url && tab.id == selectedId) { files.cancelPrompts(); answerQuestion(false); linkMenu = null }
+                    tab.url = url; save()
+                }
             }
             override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) { tab.canGoBack = canGoBack }
             override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) { tab.canGoForward = canGoForward }
@@ -238,24 +271,82 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) { tab.error = false; tab.progress = 5 }
             override fun onProgressChange(session: GeckoSession, progress: Int) { tab.progress = progress }
-            override fun onPageStop(session: GeckoSession, success: Boolean) { tab.progress = 100; if (!success) tab.error = true }
+            override fun onPageStop(session: GeckoSession, success: Boolean) {
+                tab.progress = 100
+                if (!success) tab.error = true
+                else if (DemoPolicy.isWebUrl(tab.url)) {
+                    history.removeAll { it.url == tab.url }
+                    history.add(0, PageRecord(tab.url, tab.title.take(512), System.currentTimeMillis()))
+                    while (history.size > 500) history.removeAt(history.lastIndex)
+                    save()
+                }
+            }
         }
         session.contentDelegate = object : GeckoSession.ContentDelegate {
-            override fun onTitleChange(session: GeckoSession, title: String?) { tab.title = title.orEmpty() }
+            override fun onTitleChange(session: GeckoSession, title: String?) { tab.title = title.orEmpty().take(512); save() }
             override fun onCloseRequest(session: GeckoSession) { closeTab(tab.id) }
             override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
                 if (tab.id == selectedId) this@BrowserModel.fullScreen = fullScreen
             }
             override fun onCrash(session: GeckoSession) { tab.error = true; tab.progress = 100 }
+            override fun onContextMenu(session: GeckoSession, screenX: Int, screenY: Int, element: GeckoSession.ContentDelegate.ContextElement) {
+                val url = element.linkUri ?: return
+                if (foreground && tab.id == selectedId && DemoPolicy.isWebUrl(url))
+                    linkMenu = LinkTarget(tab.id, url, element.linkText ?: element.title ?: url)
+            }
+            override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
+                if (foreground) files.requestDownload(session, response) else response.body?.close()
+            }
+        }
+        session.promptDelegate = object : GeckoSession.PromptDelegate {
+            override fun onFilePrompt(session: GeckoSession, prompt: GeckoSession.PromptDelegate.FilePrompt): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                return if (foreground) files.requestUpload(session, prompt) else GeckoResult.fromValue(prompt.dismiss())
+            }
+            override fun onAlertPrompt(session: GeckoSession, prompt: GeckoSession.PromptDelegate.AlertPrompt): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                return websiteQuestion(tab, prompt, prompt.message.orEmpty()) { prompt.dismiss() }
+            }
+            override fun onButtonPrompt(session: GeckoSession, prompt: GeckoSession.PromptDelegate.ButtonPrompt): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                return websiteQuestion(tab, prompt, prompt.message.orEmpty()) { allow ->
+                    prompt.confirm(if (allow) GeckoSession.PromptDelegate.ButtonPrompt.Type.POSITIVE else GeckoSession.PromptDelegate.ButtonPrompt.Type.NEGATIVE)
+                }
+            }
         }
         // NavigationDelegate and WebExtension.TabDelegate require an UNOPENED session.
         // Gecko opens it with the inherited browsing context before loading its target.
         if (url != null) session.open(runtime)
+        if (url != null) {
+            tab.url = url
+            if (url != DemoPolicy.HOME) tab.pendingUrl = url
+        }
         extensions.forEach { attachExtension(tab, it) }
         tabs.add(tab)
         if (select || tabs.size == 1) selectTab(tab.id) else updateActiveSessions()
-        if (url != null) { tab.url = url; session.loadUri(url) }
+        save()
         return tab
+    }
+
+    private fun websiteQuestion(tab: BrowserTab, prompt: GeckoSession.PromptDelegate.BasePrompt, message: String,
+        confirm: (Boolean) -> GeckoSession.PromptDelegate.PromptResponse): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        var finished = false
+        fun resolve(allow: Boolean) {
+            if (finished) return
+            finished = true
+            if (prompt.isComplete) result.completeExceptionally(CancellationException("Page dismissed the dialog"))
+            else result.complete(confirm(allow))
+        }
+        if (!foreground || tab.id != selectedId || question != null) resolve(false)
+        else {
+            val pending = PermissionQuestion(text(R.string.website_dialog, android.net.Uri.parse(tab.url).host.orEmpty()), message.take(4096), ::resolve)
+            question = pending
+            prompt.setDelegate(object : GeckoSession.PromptDelegate.PromptInstanceDelegate {
+                override fun onPromptDismiss(prompt: GeckoSession.PromptDelegate.BasePrompt) {
+                    if (question === pending) question = null
+                    resolve(false)
+                }
+            })
+        }
+        return result
     }
 
     fun selectTab(id: Long) {
@@ -265,14 +356,17 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             fullScreen = false
             closePopup()
             answerQuestion(false)
+            files.cancelPrompts(); linkMenu = null
         }
         selectedId = id
         updateActiveSessions()
+        save()
     }
 
     fun closeTab(id: Long) {
         val index = tabs.indexOfFirst { it.id == id }
         if (index < 0) return
+        files.cancelPrompts(); linkMenu = null
         if (selectedId == id) { closePopup(); fullScreen = false }
         val removed = tabs.removeAt(index)
         removed.session.setActive(false)
@@ -280,32 +374,95 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         overrides.keys.filter { it.second == id }.forEach { overrides.remove(it) }
         if (tabs.isEmpty()) newTab(DemoPolicy.HOME)
         else if (selectedId == id) selectTab(tabs[index.coerceAtMost(tabs.lastIndex)].id)
+        save()
     }
 
     fun navigate(input: String): Boolean {
-        val url = DemoPolicy.inputUrl(input) ?: run { notify(R.string.unsupported_link); return false }
+        val url = DemoPolicy.inputUrl(input, searchEngine) ?: run { notify(R.string.unsupported_link); return false }
+        files.cancelPrompts(); answerQuestion(false); linkMenu = null
+        current.pendingUrl = null
         closePopup(); current.url = url; current.error = false; current.session.loadUri(url)
+        save()
         return true
     }
 
-    fun home() { current.url = DemoPolicy.HOME; current.error = false; current.session.loadUri(DemoPolicy.HOME) }
+    fun home() { files.cancelPrompts(); current.pendingUrl = null; current.url = DemoPolicy.HOME; current.error = false; current.session.loadUri(DemoPolicy.HOME); save() }
     fun back() { if (fullScreen) current.session.exitFullScreen() else if (current.canGoBack) current.session.goBack() }
-    fun reload() { current.error = false; current.session.reload() }
+    fun reload() {
+        current.error = false
+        if (!current.session.isOpen) { current.session.open(runtime); current.session.loadUri(current.url) }
+        else current.session.reload()
+    }
 
     fun setForeground(value: Boolean) {
         foreground = value
-        if (!value) { answerQuestion(false); closePopup() }
+        if (!value) { answerQuestion(false); closePopup(); files.backgrounded(); linkMenu = null; saveImmediately() }
         updateActiveSessions()
     }
 
     private fun updateActiveSessions() {
         val selected = tabs.indexOfFirst { it.id == selectedId }
         tabs.forEachIndexed { index, it ->
+            if (!restoring && foreground && kotlin.math.abs(index - selected) <= 1) {
+                it.pendingUrl?.let { target -> it.pendingUrl = null; it.session.loadUri(target) }
+            }
             // Adjacent pages must paint before a bottom-bar drag exposes their surfaces.
             it.session.setActive(foreground && kotlin.math.abs(index - selected) <= 1)
             it.session.setFocused(foreground && popup == null && it.id == selectedId)
             controller.setTabActive(it.session, it.id == selectedId)
         }
+    }
+
+    fun save() {
+        if (restoring || disposed) return
+        saveJob?.cancel()
+        saveJob = viewModelScope.launch { delay(250); saveImmediately() }
+    }
+
+    private fun saveImmediately() {
+        if (restoring || disposed) return
+        val portableTabs = tabs.filter { it.url == DemoPolicy.HOME || DemoPolicy.isWebUrl(it.url) }
+            .map { StoredTab(it.id.toString(), if (it.url == DemoPolicy.HOME) "" else it.url, it.title) }
+            .ifEmpty { listOf(StoredTab()) }
+        val active = selectedId.toString().takeIf { id -> portableTabs.any { it.id == id } } ?: portableTabs.first().id
+        storage.save(BrowserData(tabs = portableTabs, activeTabId = active, bookmarks = bookmarks.toList(),
+            history = history.toList(), settings = BrowserSettings(searchEngine.id)))
+    }
+
+    fun toggleBookmark() {
+        if (!DemoPolicy.isWebUrl(current.url)) return
+        val removed = bookmarks.removeAll { it.url == current.url }
+        if (!removed) {
+            bookmarks.add(0, PageRecord(current.url, current.title.take(512), System.currentTimeMillis()))
+            while (bookmarks.size > 200) bookmarks.removeAt(bookmarks.lastIndex)
+        }
+        save(); notify(if (removed) R.string.bookmark_removed else R.string.bookmark_added)
+    }
+
+    fun removeBookmark(url: String) { bookmarks.removeAll { it.url == url }; save() }
+    fun clearHistory() {
+        question = PermissionQuestion(text(R.string.clear_history), text(R.string.clear_history_note)) { allow ->
+            if (allow) { history.clear(); save() }
+        }
+    }
+    fun setSearch(engine: SearchEngine) { searchEngine = engine; save() }
+    fun closeOtherTabs() { tabs.filter { it.id != selectedId }.toList().forEach { closeTab(it.id) } }
+    fun openLink(background: Boolean) {
+        val target = linkMenu ?: return
+        linkMenu = null
+        if (target.tabId == selectedId) newTab(target.url, select = !background)
+    }
+
+    fun updateExtension(extension: WebExtension) {
+        if (busyId != null || extension.isBuiltIn) return
+        busyId = extension.id
+        controller.update(extension).accept({ updated ->
+            if (!disposed) {
+                busyId = null
+                if (updated != null) { putExtension(updated); notify(R.string.extension_updated) }
+                else notify(R.string.extension_latest)
+            }
+        }, { busyId = null; notify(R.string.extensions_failed) })
     }
 
     fun install(choice: AddonChoice) {
@@ -412,13 +569,29 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             }
         })
         newTab(DemoPolicy.HOME)
-        newTab("https://example.org", select = false)
+        viewModelScope.launch {
+            val restored = storage.restore()
+            storageReadOnly = restored.isFailure
+            restored.getOrNull()?.let { data ->
+                tabs.forEach { it.session.close() }; tabs.clear()
+                data.tabs.forEach { stored -> newTab(stored.url.ifEmpty { DemoPolicy.HOME }, select = false)?.title = stored.title }
+                selectedId = tabs[data.tabs.indexOfFirst { it.id == data.activeTabId }.coerceIn(0, tabs.lastIndex)].id
+                bookmarks.addAll(data.bookmarks); history.addAll(data.history)
+                searchEngine = SearchEngine.fromId(data.settings.searchEngine)
+            }
+            restoring = false
+            updateActiveSessions()
+            if (storageReadOnly) notify(R.string.restore_failed) else save()
+            storage.writeFailed.collect { saveFailed = it }
+        }
         refreshExtensions()
     }
 
 
     override fun onCleared() {
+        saveImmediately()
         disposed = true
+        files.cancelPrompts()
         answerQuestion(false); cancelInstall(); closePopup()
         extensions.forEach { it.setActionDelegate(null); it.setTabDelegate(null) }
         tabs.forEach { it.session.close() }
