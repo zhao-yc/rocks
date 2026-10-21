@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application") version "9.1.1"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.2.10"
+    kotlin("android") version "2.4.0"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.0"
 }
 
 android {
@@ -15,6 +16,7 @@ android {
         ndk { abiFilters += "arm64-v8a" }
     }
     buildFeatures { compose = true }
+    packaging { jniLibs.useLegacyPackaging = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

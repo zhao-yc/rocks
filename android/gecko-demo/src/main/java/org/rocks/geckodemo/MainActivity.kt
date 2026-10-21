@@ -103,7 +103,10 @@ private fun BrowserScreen(model: BrowserModel) {
         }
     }
     LaunchedEffect(model.notice) {
-        model.notice?.let { val message = it; model.notice = null; snackbar.showSnackbar(message) }
+        model.notice?.let { message ->
+            snackbar.showSnackbar(message)
+            if (model.notice == message) model.notice = null
+        }
     }
     LaunchedEffect(editing) { if (editing) focusRequester.requestFocus() }
     LaunchedEffect(model.fullScreen) {
@@ -265,7 +268,7 @@ private fun GeckoPage(session: GeckoSession, modifier: Modifier) {
                 setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
                 setSession(session)
             }
-        }, modifier = modifier, onRelease = { it.releaseSession() })
+        }, modifier = modifier, onReset = null, onRelease = { it.releaseSession() })
     }
 }
 

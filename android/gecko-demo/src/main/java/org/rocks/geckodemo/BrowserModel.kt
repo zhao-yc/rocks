@@ -215,6 +215,8 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         session.permissionDelegate = deniedPermissions
         session.navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
+                if (request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW &&
+                    (!request.hasUserGesture || tab.id != selectedId)) return GeckoResult.deny()
                 val allowed = DemoPolicy.canLoad(request.uri, tab.extensionBase)
                 if (!allowed && request.hasUserGesture && tab.id == selectedId) notify(R.string.unsupported_link)
                 return if (allowed) GeckoResult.allow() else GeckoResult.deny()
@@ -246,7 +248,9 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             }
             override fun onCrash(session: GeckoSession) { tab.error = true; tab.progress = 100 }
         }
-        session.open(runtime)
+        // NavigationDelegate and WebExtension.TabDelegate require an UNOPENED session.
+        // Gecko opens it with the inherited browsing context before loading its target.
+        if (url != null) session.open(runtime)
         extensions.forEach { attachExtension(tab, it) }
         tabs.add(tab)
         if (select || tabs.size == 1) selectTab(tab.id) else updateActiveSessions()
@@ -403,7 +407,8 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             override fun onEnabled(extension: WebExtension) { putExtension(extension) }
             override fun onDisabled(extension: WebExtension) { putExtension(extension); clearActions(extension.id) }
             override fun onUninstalled(extension: WebExtension) {
-                extensions.removeAll { it.id == extension.id }; clearActions(extension.id)
+                clearActions(extension.id)
+                extensions.removeAll { it.id == extension.id }
             }
         })
         newTab(DemoPolicy.HOME)
@@ -415,6 +420,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     override fun onCleared() {
         disposed = true
         answerQuestion(false); cancelInstall(); closePopup()
+        extensions.forEach { it.setActionDelegate(null); it.setTabDelegate(null) }
         tabs.forEach { it.session.close() }
         tabs.clear()
         controller.setPromptDelegate(null)
