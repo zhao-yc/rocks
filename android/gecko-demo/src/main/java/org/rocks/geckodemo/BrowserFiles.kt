@@ -68,15 +68,19 @@ internal class BrowserFiles(
             else if (pending.prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE)
                 pending.prompt.confirm(app, selected.first())
             else pending.prompt.confirm(app, selected.toTypedArray())
-        }.getOrElse { notify(R.string.file_failed); pending.prompt.dismiss() }
-        pending.result.complete(response)
+        }
+        response.fold(pending.result::complete) { error ->
+            notify(R.string.file_failed)
+            if (!pending.prompt.isComplete) pending.result.complete(pending.prompt.dismiss())
+            else pending.result.completeExceptionally(error)
+        }
     }
 
     fun requestDownload(session: GeckoSession, response: WebResponse) {
         val page = selectedPage(session)
         if (page == null || offer != null || destination != null || response.body == null ||
             response.statusCode !in 200..299 || !DemoPolicy.isWebUrl(response.uri)) {
-            response.body?.close(); return
+            runCatching { response.body?.close() }; return
         }
         val mime = response.headers.entries.firstOrNull { it.key.equals("content-type", true) }?.value
             ?.substringBefore(';')?.takeIf { it.matches(Regex("[a-zA-Z0-9.+_-]+/[a-zA-Z0-9.+_-]+")) }
@@ -89,7 +93,7 @@ internal class BrowserFiles(
     fun confirmDownload(allow: Boolean) {
         val pending = offer ?: return
         offer = null
-        if (!allow || selectedPage(pending.session) != pending.page) pending.response.body?.close()
+        if (!allow || selectedPage(pending.session) != pending.page) runCatching { pending.response.body?.close() }
         else destination = pending
     }
 
@@ -97,7 +101,7 @@ internal class BrowserFiles(
         val pending = destination ?: return
         destination = null
         if (uri?.scheme != "content" || selectedPage(pending.session) != pending.page) {
-            pending.response.body?.close(); return
+            runCatching { pending.response.body?.close() }; return
         }
         val encoded = pending.response.headers.entries.firstOrNull { it.key.equals("content-encoding", true) }?.value
         val length = if (encoded != null && !encoded.equals("identity", true)) -1 else
@@ -111,21 +115,9 @@ internal class BrowserFiles(
                     pending.response.body!!.use { input ->
                         val output = app.contentResolver.openOutputStream(uri, "w") ?: error("No document stream")
                         output.use { target ->
-                            val buffer = ByteArray(64 * 1024)
-                            var written = 0L
-                            var reported = 0L
-                            while (true) {
-                                ensureActive()
-                                val count = input.read(buffer)
-                                if (count < 0) break
-                                target.write(buffer, 0, count); written += count
-                                if (written - reported >= 256 * 1024) {
-                                    reported = written
-                                    withContext(Dispatchers.Main) { task.bytes = written }
-                                }
+                            copyDownload(input, target, length) { written ->
+                                withContext(Dispatchers.Main) { task.bytes = written }
                             }
-                            if (length >= 0) check(written == length) { "Incomplete download" }
-                            written
                         }
                     }
                 }
@@ -138,12 +130,12 @@ internal class BrowserFiles(
 
     fun cancelPrompts() {
         completeUpload(emptyList())
-        offer?.response?.body?.close(); offer = null
-        destination?.response?.body?.close(); destination = null
+        runCatching { offer?.response?.body?.close() }; offer = null
+        runCatching { destination?.response?.body?.close() }; destination = null
     }
 
     fun backgrounded() {
         // Keep a user-invoked system picker alive; it intentionally pauses the activity.
-        offer?.response?.body?.close(); offer = null
+        runCatching { offer?.response?.body?.close() }; offer = null
     }
 }

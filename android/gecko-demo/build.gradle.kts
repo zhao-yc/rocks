@@ -40,15 +40,23 @@ android {
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 
-// Compile the already tested portable codec and atomic repository without importing WebView UI.
-kotlin.sourceSets.getByName("main").kotlin.apply {
-    srcDir("../app/src/main/java")
-    include("org/rocks/geckodemo/**", "org/rocks/browser/SessionCodec.kt",
-        "org/rocks/browser/SessionRepository.kt", "org/rocks/browser/AtomicSessionFile.kt")
+// A whitelist prevents the original WebView UI/resources from entering this application.
+val sharedBrowserSources = tasks.register<Sync>("sharedBrowserSources") {
+    from("../app/src/main/java") {
+        include("org/rocks/browser/SessionCodec.kt", "org/rocks/browser/SessionRepository.kt", "org/rocks/browser/AtomicSessionFile.kt")
+    }
+    into(layout.buildDirectory.dir("generated/shared-browser/main"))
 }
-kotlin.sourceSets.getByName("test").kotlin.apply {
-    srcDir("../app/src/test/java")
-    include("org/rocks/geckodemo/**", "org/rocks/browser/SessionCodecTest.kt", "org/rocks/browser/SessionRepositoryTest.kt")
+val sharedBrowserTests = tasks.register<Sync>("sharedBrowserTests") {
+    from("../app/src/test/java") {
+        include("org/rocks/browser/SessionCodecTest.kt", "org/rocks/browser/SessionRepositoryTest.kt")
+    }
+    into(layout.buildDirectory.dir("generated/shared-browser/test"))
+}
+kotlin.sourceSets.getByName("main").kotlin.srcDir(sharedBrowserSources.map { it.destinationDir })
+kotlin.sourceSets.getByName("test").kotlin.srcDir(sharedBrowserTests.map { it.destinationDir })
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    dependsOn(sharedBrowserSources, sharedBrowserTests)
 }
 
 dependencies {
