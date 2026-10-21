@@ -10,6 +10,7 @@ Android 10 / API 29 and newer:
 
 - Minimal home, bottom address/search bar, back/forward, reload/stop and tab overview.
 - Safari-inspired interactions on Android: tap the compact address bar to edit the full URL, cancel without navigating, swipe it to select adjacent tabs, and manage tabs in a full-screen card grid. Long-press the tab button for new/close/close-other actions; share and bookmarks are directly available on the bottom toolbar.
+- Rocks keeps its own moss-green and warm-paper visual style. Long-press a web link to open it in a foreground/background tab, copy it or share it. Background tabs load when selected.
 - Up to 24 normal tabs. In-memory WebView back/forward stacks remain separate per tab.
 - Local restore of tab URLs, selection, bookmarks, bounded history and search preference. Form contents, scroll positions and back/forward stacks are not restored after process death.
 - Bing China by default; Baidu, DuckDuckGo and Google are optional. Availability depends on the network.

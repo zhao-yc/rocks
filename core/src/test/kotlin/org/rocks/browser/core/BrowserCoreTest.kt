@@ -67,6 +67,28 @@ class BrowserCoreTest {
         assertEquals(state, previous.selectAdjacentTab(next = true))
     }
 
+    @Test fun backgroundLinkCreatesANormalizedTabWithoutSwitchingOrRecordingAVisit() {
+        val original = BrowserData()
+        val background = original.openTab("HTTPS://Example.COM/path", inBackground = true)
+        assertEquals(2, background.tabs.size)
+        assertEquals(original.activeTabId, background.activeTabId)
+        assertEquals("https://example.com/path", background.tabs.last().url)
+        assertTrue(background.history.isEmpty())
+        assertEquals(background.tabs.last().id, background.selectAdjacentTab(next = true).activeTabId)
+    }
+
+    @Test fun linkTabsRejectUnsafeUrlsAndRespectTheLimitInBothModes() {
+        val original = BrowserData()
+        listOf("javascript:alert(1)", "file:///private", "https://user:password@example.com/", "intent://example").forEach { url ->
+            assertEquals(original, original.openTab(url))
+            assertEquals(original, original.openTab(url, inBackground = true))
+        }
+        var full = original
+        repeat(MAX_TABS - 1) { full = full.openTab() }
+        assertEquals(full, full.openTab("https://example.com/", inBackground = true))
+        assertEquals(full, full.openTab("https://example.com/"))
+    }
+
     @Test fun addressBarSwipeStopsAtBothEndsAndWorksAfterClosingNeighbor() {
         val first = BrowserData()
         assertEquals(first, first.selectAdjacentTab(next = false))

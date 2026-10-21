@@ -34,10 +34,11 @@ data class BrowserData(
     val activeTab: BrowserTab get() = tabs.firstOrNull { it.id == activeTabId } ?: tabs.first()
 
     /** 所有变更返回新快照，关闭最后一个标签时保持一个可用首页。 */
-    fun openTab(url: String = ""): BrowserData {
+    fun openTab(url: String = "", inBackground: Boolean = false): BrowserData {
         if (tabs.size >= MAX_TABS) return this
-        val tab = BrowserTab(url = url)
-        return copy(tabs = tabs + tab, activeTabId = tab.id)
+        val target = if (url.isEmpty()) "" else AddressResolver.normalizeWebUrl(url) ?: return this
+        val tab = BrowserTab(url = target)
+        return copy(tabs = tabs + tab, activeTabId = if (inBackground) activeTabId else tab.id)
     }
 
     fun closeTab(id: String): BrowserData {

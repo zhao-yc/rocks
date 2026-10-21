@@ -117,7 +117,9 @@ class SessionRepositoryTest {
         val file = MemoryFile()
         val repository = SessionRepository(file)
         repository.restore()
-        val huge = BrowserData().openTab("https://example.com/" + "中".repeat(MAX_SESSION_BYTES / 2))
+        val huge = BrowserData(history = List(MAX_HISTORY) { index ->
+            PageRecord("https://example.com/$index/" + "a".repeat(7900), "中".repeat(512), index.toLong())
+        })
         assertTrue(runCatching { repository.save(huge) }.exceptionOrNull() is IllegalArgumentException)
         assertNull(file.contents)
         assertEquals(0, file.writes)

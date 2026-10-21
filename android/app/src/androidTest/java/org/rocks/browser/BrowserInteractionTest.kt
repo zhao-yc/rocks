@@ -48,9 +48,11 @@ class BrowserInteractionTest {
             }
         }
         rule.onNodeWithTag("address-bar").performTouchInput { click() }
-        rule.onNodeWithTag("address-input").performTextReplacement("file:///blocked").performImeAction()
+        rule.onNodeWithTag("address-input").performTextReplacement("file:///blocked")
+        rule.onNodeWithTag("address-input").performImeAction()
         rule.onNodeWithTag("address-input").assertTextContains("file:///blocked")
-        rule.onNodeWithTag("address-input").performTextReplacement("example.com").performImeAction()
+        rule.onNodeWithTag("address-input").performTextReplacement("example.com")
+        rule.onNodeWithTag("address-input").performImeAction()
         rule.onNodeWithTag("address-input").assertDoesNotExist()
         rule.runOnIdle { assertEquals("example.com", accepted) }
     }
@@ -101,5 +103,22 @@ class BrowserInteractionTest {
         rule.onNodeWithTag("tab-card-$originalId").assertDoesNotExist()
         rule.runOnIdle { assertEquals(1, data.tabs.size); assertEquals("", data.activeTab.url) }
         rule.onNodeWithTag("tab-card-${data.activeTabId}").assertIsSelected()
+    }
+
+    @Test fun linkMenuExposesForegroundBackgroundCopyAndShareActions() {
+        val opened = mutableListOf<Boolean>()
+        var copied = false
+        var shared = false
+        rule.setContent {
+            MaterialTheme {
+                LinkActionsSheet("https://example.com/path", onDismiss = {}, onOpen = { opened += it },
+                    onCopy = { copied = true }, onShare = { shared = true })
+            }
+        }
+        rule.onNodeWithTag("link-open").performScrollTo().performClick()
+        rule.onNodeWithTag("link-background").performScrollTo().performClick()
+        rule.onNodeWithTag("link-copy").performScrollTo().performClick()
+        rule.onNodeWithTag("link-share").performScrollTo().performClick()
+        rule.runOnIdle { assertEquals(listOf(false, true), opened); assertTrue(copied); assertTrue(shared) }
     }
 }

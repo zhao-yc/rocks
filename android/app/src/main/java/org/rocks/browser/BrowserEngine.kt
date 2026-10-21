@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import org.rocks.browser.core.*
 
 data class PageStatus(val back: Boolean = false, val forward: Boolean = false, val progress: Int = 100)
+data class LinkTarget(val tabId: String, val url: String)
 
 /** 每个普通标签拥有自己的 WebView；网页存储属于同一普通浏览配置。 */
 class BrowserEngine(
@@ -21,6 +22,7 @@ class BrowserEngine(
     private val model: BrowserViewModel,
     private val external: (Uri) -> Unit,
     private val requestDownload: (DownloadRequest) -> Unit,
+    private val requestLinkActions: (LinkTarget) -> Unit,
 ) {
     private val views = mutableMapOf<String, WebView>()
     private val requested = mutableMapOf<String, String>()
@@ -46,6 +48,15 @@ class BrowserEngine(
                 CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
                 webViewClient = client(tab.id)
                 webChromeClient = chrome(tab.id)
+                setOnLongClickListener {
+                    if (!resumed || views[tab.id] !== this || model.data.activeTabId != tab.id) return@setOnLongClickListener false
+                    val hit = hitTestResult
+                    if (hit.type != WebView.HitTestResult.SRC_ANCHOR_TYPE &&
+                        hit.type != WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) return@setOnLongClickListener false
+                    val url = hit.extra?.let(AddressResolver::normalizeWebUrl) ?: return@setOnLongClickListener false
+                    requestLinkActions(LinkTarget(tab.id, url))
+                    true
+                }
                 setDownloadListener { url, userAgent, disposition, mimeType, _ ->
                     if (AddressResolver.isWebUrl(url)) requestDownload(DownloadRequest(url, userAgent, disposition, mimeType))
                     else model.showNotice(activity.getString(R.string.unsupported_download))

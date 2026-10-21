@@ -1,5 +1,10 @@
 <resources>
     <string name="tabs">标签页</string>
+    <string name="link">链接</string>
+    <string name="open_link_new_tab">在新标签页打开</string>
+    <string name="open_link_background">在后台标签页打开</string>
+    <string name="copy_link">复制链接</string>
+    <string name="share_link">分享链接</string>
     <string name="done">完成</string>
     <string name="clear_address">清空地址</string>
     <string name="tab_actions">标签页操作</string>

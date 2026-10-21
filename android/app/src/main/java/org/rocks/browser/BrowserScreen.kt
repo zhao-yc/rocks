@@ -40,8 +40,9 @@ private enum class BrowserPanel { TABS, BOOKMARKS, HISTORY, SETTINGS }
 fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel()) {
     var pendingExternal by remember { mutableStateOf<Uri?>(null) }
     var pendingDownload by remember { mutableStateOf<DownloadRequest?>(null) }
+    var pendingLink by remember { mutableStateOf<LinkTarget?>(null) }
     val engine = remember(activity, model) { BrowserEngine(activity, model,
-        external = { pendingExternal = it }, requestDownload = { pendingDownload = it }) }
+        external = { pendingExternal = it }, requestDownload = { pendingDownload = it }, requestLinkActions = { pendingLink = it }) }
     var panel by rememberSaveable { mutableStateOf<BrowserPanel?>(null) }
     var menu by remember { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
@@ -62,6 +63,7 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
     }
     LaunchedEffect(active.id, model.ready) {
         if (model.ready && editing && editingTabId != active.id) dismissAddress()
+        if (pendingLink?.tabId != active.id) pendingLink = null
     }
     DisposableEffect(engine, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -225,6 +227,16 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
         }
     }
 
+    pendingLink?.takeIf { it.tabId == active.id }?.let { link ->
+        LinkActionsSheet(link.url, onDismiss = { pendingLink = null },
+            onOpen = { background ->
+                pendingLink = null
+                if (data.tabs.size >= MAX_TABS) model.showNotice(activity.getString(R.string.tab_limit, MAX_TABS))
+                else model.change { it.openTab(link.url, inBackground = background) }
+            },
+            onCopy = { pendingLink = null; activity.copyLink(link.url) },
+            onShare = { pendingLink = null; activity.share(link.url) })
+    }
     pendingExternal?.let { uri ->
         AlertDialog(onDismissRequest = { pendingExternal = null }, title = { Text(activity.getString(R.string.open_app_title)) }, text = { Text(uri.toString().take(1024)) },
             confirmButton = { TextButton(onClick = { pendingExternal = null; if (!activity.openExternal(uri)) model.showNotice(activity.getString(R.string.no_app)) }) { Text(activity.getString(R.string.open_app)) } },

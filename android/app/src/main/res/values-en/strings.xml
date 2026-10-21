@@ -1,5 +1,10 @@
 <resources>
     <string name="tabs">Tabs</string>
+    <string name="link">Link</string>
+    <string name="open_link_new_tab">Open in new tab</string>
+    <string name="open_link_background">Open in background tab</string>
+    <string name="copy_link">Copy link</string>
+    <string name="share_link">Share link</string>
     <string name="done">Done</string>
     <string name="clear_address">Clear address</string>
     <string name="tab_actions">Tab actions</string>
