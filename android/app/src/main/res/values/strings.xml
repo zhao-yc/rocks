@@ -44,7 +44,7 @@
     <string name="restore_failed">无法恢复会话，已保留原始文件，本次更改不会保存。</string>
     <string name="save_failed">无法保存会话，请检查可用存储空间。</string>
     <string name="unsupported_download">暂不支持这种下载类型，目前仅支持 HTTP/HTTPS 下载。</string>
-    <string name="blocked_link">无法打开此链接。仅支持网页与经确认的部分应用链接。</string>
+    <string name="unsupported_link_hint">暂不支持此链接，已留在当前网页。</string>
     <string name="certificate_error">网站证书错误，Rocks 已阻止连接，不能跳过证书检查。</string>
     <string name="page_failed">网页加载失败，请检查网址和网络连接。</string>
     <string name="renderer_stopped">网页进程已停止，请重新打开网址。</string>

@@ -20,7 +20,7 @@ data class LinkTarget(val tabId: String, val url: String)
 class BrowserEngine(
     private val activity: MainActivity,
     private val model: BrowserViewModel,
-    private val external: (Uri) -> Unit,
+    private val external: (LinkTarget) -> Unit,
     private val requestDownload: (DownloadRequest) -> Unit,
     private val requestLinkActions: (LinkTarget) -> Unit,
 ) {
@@ -78,12 +78,15 @@ class BrowserEngine(
 
     private fun client(id: String) = object : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-            val uri = request.url
-            if (AddressResolver.isWebUrl(uri.toString())) return false
-            if (request.isForMainFrame && request.hasGesture() && model.data.activeTabId == id &&
-                uri.scheme?.lowercase() in setOf("mailto", "tel", "sms", "geo")) external(uri)
-            else model.showNotice(activity.getString(R.string.blocked_link))
-            return true
+            val url = request.url.toString()
+            return when (NavigationPolicy.decide(url, NavigationContext(
+                request.isForMainFrame, request.hasGesture(), model.data.activeTabId == id, resumed, views[id] === view,
+            ))) {
+                NavigationDecision.LOAD_WEB -> false
+                NavigationDecision.CONFIRM_EXTERNAL -> { external(LinkTarget(id, url)); true }
+                NavigationDecision.HINT_UNSUPPORTED -> { model.showHint(activity.getString(R.string.unsupported_link_hint)); true }
+                NavigationDecision.BLOCK_SILENTLY -> true
+            }
         }
 
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
@@ -119,7 +122,8 @@ class BrowserEngine(
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-            if (request.isForMainFrame) model.showNotice(activity.getString(R.string.page_failed))
+            if (views[id] === view && resumed && model.data.activeTabId == id && request.isForMainFrame &&
+                AddressResolver.isWebUrl(request.url.toString())) model.showNotice(activity.getString(R.string.page_failed))
         }
 
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
@@ -153,7 +157,9 @@ class BrowserEngine(
             activity.chooseFiles(filePathCallback, fileChooserParams)
 
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
-            model.showNotice(activity.getString(R.string.popup_blocked))
+            if (NavigationContext(true, isUserGesture, model.data.activeTabId == id, resumed, views[id] === view).mayPromptUser) {
+                model.showHint(activity.getString(R.string.popup_blocked))
+            }
             return false
         }
 

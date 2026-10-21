@@ -18,6 +18,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     var data by mutableStateOf(BrowserData()); private set
     var ready by mutableStateOf(false); private set
     var notice by mutableStateOf<String?>(null); private set
+    var hint by mutableStateOf<String?>(null); private set
     private val writes = Channel<BrowserData>(Channel.CONFLATED)
     private val repository = SessionRepository(AtomicSessionFile(File(application.filesDir, "browser-state.json")))
 
@@ -56,4 +57,6 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     fun showNotice(message: String) { notice = message }
     fun clearNotice() { notice = null }
+    fun showHint(message: String) { hint = message }
+    fun clearHint(message: String) { if (hint == message) hint = null }
 }

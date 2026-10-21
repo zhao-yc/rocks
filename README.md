@@ -17,6 +17,7 @@ Android 10 / API 29 and newer:
 - Confirmed HTTP(S) downloads via system DownloadManager, document-picker uploads, sharing and a custom video fullscreen view.
 - SSL errors always cancel; mixed content, local file/content loading, automatic pop-ups and third-party cookies are disabled.
 - Camera, microphone and location requests are explicitly denied in the prototype. `tel`, `mailto`, `sms` and `geo` links require a foreground user gesture and confirmation. Other schemes and `intent:` links are blocked for now.
+- Automatic app-launch attempts, background/frame requests and automatic pop-ups are blocked silently. A direct tap on an unsupported link shows a short snackbar; it does not interrupt reading with a confirmation dialog.
 
 HarmonyOS has a real Stage project, UIAbility, ArkUI/ArkWeb navigation page, models and a Preferences session adapter. **Not compiled or run:** this machine lacks DevEco/HarmonyOS SDK. Multi-tab UI, bookmarks/history, downloads, uploads, sharing and fullscreen parity remain planned. See [HarmonyOS notes](harmony/README.md).
 

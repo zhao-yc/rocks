@@ -44,7 +44,7 @@
     <string name="restore_failed">Session could not be restored. The original file is preserved; changes will not be saved.</string>
     <string name="save_failed">Could not save this session. Check available storage.</string>
     <string name="unsupported_download">This download type is not supported yet (HTTP/HTTPS only).</string>
-    <string name="blocked_link">This link cannot be opened. Only websites and confirmed supported app links are allowed.</string>
+    <string name="unsupported_link_hint">This link is not supported yet. You are still on the current page.</string>
     <string name="certificate_error">Certificate error. Rocks blocked this connection; there is no bypass.</string>
     <string name="page_failed">The page could not be loaded. Check the address and your connection.</string>
     <string name="renderer_stopped">The web renderer stopped. Open the address again to retry.</string>

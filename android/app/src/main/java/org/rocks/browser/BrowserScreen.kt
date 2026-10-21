@@ -38,7 +38,7 @@ private enum class BrowserPanel { TABS, BOOKMARKS, HISTORY, SETTINGS }
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel()) {
-    var pendingExternal by remember { mutableStateOf<Uri?>(null) }
+    var pendingExternal by remember { mutableStateOf<LinkTarget?>(null) }
     var pendingDownload by remember { mutableStateOf<DownloadRequest?>(null) }
     var pendingLink by remember { mutableStateOf<LinkTarget?>(null) }
     val engine = remember(activity, model) { BrowserEngine(activity, model,
@@ -53,6 +53,14 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
     val data = model.data
     val active = data.activeTab
     val status = engine.statuses[active.id] ?: PageStatus()
+    val snackbarHost = remember { SnackbarHostState() }
+
+    LaunchedEffect(model.hint) {
+        model.hint?.let { message ->
+            snackbarHost.showSnackbar(message)
+            model.clearHint(message)
+        }
+    }
 
     fun dismissAddress() { editing = false; focusManager.clearFocus() }
     fun openPanel(value: BrowserPanel) { dismissAddress(); menu = false; tabMenu = false; panel = value }
@@ -64,11 +72,12 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
     LaunchedEffect(active.id, model.ready) {
         if (model.ready && editing && editingTabId != active.id) dismissAddress()
         if (pendingLink?.tabId != active.id) pendingLink = null
+        if (pendingExternal?.tabId != active.id) pendingExternal = null
     }
     DisposableEffect(engine, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) engine.setResumed(true)
-            if (event == Lifecycle.Event.ON_PAUSE) engine.setResumed(false)
+            if (event == Lifecycle.Event.ON_PAUSE) { pendingExternal = null; engine.setResumed(false) }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer); engine.destroy() }
@@ -85,6 +94,7 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHost) },
         bottomBar = {
             Surface(tonalElevation = 4.dp) {
                 Column(Modifier.navigationBarsPadding().imePadding().padding(horizontal = 12.dp)) {
@@ -237,7 +247,8 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
             onCopy = { pendingLink = null; activity.copyLink(link.url) },
             onShare = { pendingLink = null; activity.share(link.url) })
     }
-    pendingExternal?.let { uri ->
+    pendingExternal?.takeIf { it.tabId == active.id }?.let { link ->
+        val uri = Uri.parse(link.url)
         AlertDialog(onDismissRequest = { pendingExternal = null }, title = { Text(activity.getString(R.string.open_app_title)) }, text = { Text(uri.toString().take(1024)) },
             confirmButton = { TextButton(onClick = { pendingExternal = null; if (!activity.openExternal(uri)) model.showNotice(activity.getString(R.string.no_app)) }) { Text(activity.getString(R.string.open_app)) } },
             dismissButton = { TextButton(onClick = { pendingExternal = null }) { Text(activity.getString(R.string.cancel)) } })
