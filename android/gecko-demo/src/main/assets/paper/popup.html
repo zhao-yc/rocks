@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rocks Paper</title>
+  <style>
+    :root{color-scheme:light}*{box-sizing:border-box}body{margin:0;padding:24px;background:#f8f8f2;color:#202822;font:16px/1.6 system-ui,sans-serif;min-width:280px}
+    small{color:#35614b;font-weight:600;letter-spacing:.12em}h1{font-size:27px;margin:8px 0}p{color:#526451;font-size:14px}label{display:flex;gap:12px;align-items:center;padding:15px 0;border-top:1px solid #dce4d5}input{width:23px;height:23px;accent-color:#35614b}button{background:#35614b;color:white;border:0;border-radius:12px;padding:12px 20px;font:inherit;width:100%;margin-top:15px}#status{min-height:24px}
+  </style>
+</head>
+<body>
+  <small>ROCKS / WEBEXTENSION</small><h1>Rocks Paper</h1>
+  <p id="intro">这是真正在网页中运行的扩展。切换后关闭面板，看看页面的变化。</p>
+  <label><input id="enabled" type="checkbox"><span id="paperLabel">暖纸阅读背景</span></label>
+  <label><input id="spacious" type="checkbox"><span id="spaceLabel">增加文字间距</span></label>
+  <button id="reset" type="button">恢复网页原样</button><p id="status" role="status"></p>
+  <script src="popup.js"></script>
+</body></html>

@@ -1,0 +1,49 @@
+name: Gecko extension demo
+on:
+  push:
+    branches: ['build/gecko-demo-20261021']
+    paths: ['android/gecko-demo/**', 'settings.gradle.kts', '.github/workflows/gecko-demo.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Check preinstalled SDK
+        run: |
+          test -d "$ANDROID_HOME/platforms/android-35"
+          test -d "$ANDROID_HOME/build-tools/35.0.0"
+      - name: Prepare fixed development signing if configured
+        id: signing
+        env:
+          ROCKS_ANDROID_SIGNING: ${{ secrets.ROCKS_ANDROID_SIGNING }}
+        run: python3 scripts/android_signing.py prepare
+      - name: Verify browser policy, lint and build demo
+        run: bash gradlew :core:test :android:gecko-demo:testDebugUnitTest :android:gecko-demo:lintDebug :android:gecko-demo:assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rocks-gecko-reports
+          path: |
+            core/build/reports/tests/
+            android/gecko-demo/build/reports/
+      - name: Verify fixed signing when configured
+        if: steps.signing.outputs.configured == 'true'
+        run: python3 scripts/android_signing.py verify --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" --apk android/gecko-demo/build/outputs/apk/debug/gecko-demo-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocks-gecko-demo-apk
+          path: android/gecko-demo/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove private signing material
+        if: always()
+        run: |
+          if [ -n "${ROCKS_ANDROID_KEYSTORE:-}" ]; then rm -f -- "$ROCKS_ANDROID_KEYSTORE"; fi
