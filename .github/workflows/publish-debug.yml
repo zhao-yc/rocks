@@ -15,8 +15,8 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      SOURCE_RUN: '39583758590'
-      SOURCE_SHA: '51237c8bcb286088c8424caf1ce3fe01402bc101'
+      SOURCE_RUN: '39592307778'
+      SOURCE_SHA: 'e9116b6942a875ec74321033cae63896646077d9'
     steps:
       - name: Verify source build and download its APK
         run: |
@@ -32,32 +32,34 @@ jobs:
       - name: Verify APK identity and signature
         run: |
           cd "$RUNNER_TEMP/rocks-apk"
-          mv app-debug.apk rocks-0.2.0-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs rocks-0.2.0-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging rocks-0.2.0-debug.apk > "$RUNNER_TEMP/apk-badging.txt"
+          mv app-debug.apk rocks-0.2.1-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs rocks-0.2.1-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging rocks-0.2.1-debug.apk > "$RUNNER_TEMP/apk-badging.txt"
           python3 - <<'PY'
           import os
           from pathlib import Path
           package = (Path(os.environ["RUNNER_TEMP"]) / "apk-badging.txt").read_text().splitlines()[0]
           assert "name='org.rocks.browser'" in package, package
-          assert "versionCode='2'" in package, package
-          assert "versionName='0.2.0-dev'" in package, package
+          assert "versionCode='3'" in package, package
+          assert "versionName='0.2.1-dev'" in package, package
           print(package)
           PY
-          sha256sum rocks-0.2.0-debug.apk > rocks-0.2.0-debug.apk.sha256
-          cat rocks-0.2.0-debug.apk.sha256
+          sha256sum rocks-0.2.1-debug.apk > rocks-0.2.1-debug.apk.sha256
+          cat rocks-0.2.1-debug.apk.sha256
       - name: Publish public testing release
         run: |
           cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
-          Android 10+ debug 测试版，版本 0.2.0-dev。
+          Android 10+ debug 测试版，版本 0.2.1-dev。
           
-          - 交互参考 iPhone Safari，保留 Rocks 苔绿和暖纸色 UI。
+          - 修复网页自动唤起 App、iframe 和自动弹窗反复打断阅读：自动请求静默拦截，主动点击未知链接仅轻提示。
+          - 支持的电话/邮件等链接仍需手势和确认，切换标签或离开应用时撤销未处理的确认。
+          - 保留 Rocks 苔绿和暖纸色 UI。
           - 底部地址编辑与横划切换、卡片标签总览、标签快捷操作。
           - 链接长按前台/后台打开、复制与分享；书签、历史、搜索、下载、上传和视频全屏。
           - Android 单元测试、lint、应用及测试 APK 编译通过。未完成真机验收。
           
-          下载 rocks-0.2.0-debug.apk 安装；sha256 文件用于核对文件完整性。
-          源码提交：51237c8bcb286088c8424caf1ce3fe01402bc101。
+          下载 rocks-0.2.1-debug.apk 安装；sha256 文件用于核对文件完整性。
+          源码提交：e9116b6942a875ec74321033cae63896646077d9。
           NOTES
           cd "$RUNNER_TEMP/rocks-apk"
-          gh release create v0.2.0-dev rocks-0.2.0-debug.apk rocks-0.2.0-debug.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title "Rocks 0.2.0-dev" --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md"
+          gh release create v0.2.1-dev rocks-0.2.1-debug.apk rocks-0.2.1-debug.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title "Rocks 0.2.1-dev" --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md"
