@@ -28,6 +28,14 @@ jobs:
           assert run["head_sha"] == os.environ["SOURCE_SHA"], "Source commit mismatch"
           assert run["conclusion"] == "success", "Source build did not pass"
           PY
+          gh api "repos/$GITHUB_REPOSITORY/compare/$SOURCE_SHA...$GITHUB_SHA" > "$RUNNER_TEMP/publish-diff.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          diff = json.loads((Path(os.environ["RUNNER_TEMP"]) / "publish-diff.json").read_text())
+          assert diff["status"] in ("ahead", "identical"), "Unexpected publish commit ancestry"
+          assert all(f["filename"] == ".github/workflows/publish-debug.yml" for f in diff["files"]), "Runtime source changed since build"
+          PY
           gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name rocks-debug-apk --dir "$RUNNER_TEMP/rocks-apk"
       - name: Verify APK identity and signature
         run: |
@@ -59,7 +67,8 @@ jobs:
           - Android 单元测试、lint、应用及测试 APK 编译通过。未完成真机验收。
           
           下载 rocks-0.2.1-debug.apk 安装；sha256 文件用于核对文件完整性。
+          安装说明：本调试包签名与 0.2.0-dev 不同，不能直接覆盖旧版；卸载旧版会清空其本地浏览数据。
           源码提交：e9116b6942a875ec74321033cae63896646077d9。
           NOTES
           cd "$RUNNER_TEMP/rocks-apk"
-          gh release create v0.2.1-dev rocks-0.2.1-debug.apk rocks-0.2.1-debug.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title "Rocks 0.2.1-dev" --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md"
+          gh release create v0.2.1-dev rocks-0.2.1-debug.apk rocks-0.2.1-debug.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Rocks 0.2.1-dev" --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md"
