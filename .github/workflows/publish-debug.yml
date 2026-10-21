@@ -20,6 +20,7 @@ jobs:
     steps:
       - name: Verify source build and download its APK
         run: |
+          set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/source-run.json"
           python3 - <<'PY'
           import json, os
@@ -37,7 +38,7 @@ jobs:
           assert all(f["filename"] == ".github/workflows/publish-debug.yml" for f in diff["files"]), "Runtime source changed since build"
           PY
           mkdir -p "$RUNNER_TEMP/rocks-apk"
-          curl --fail --location --retry 3 --max-time 180 https://tmpfiles.org/dl/wxAHMjg92CS7/rocks-0.2.2-debug.apk --output "$RUNNER_TEMP/rocks-apk/rocks-0.2.2-debug.apk"
+          curl --fail --location --retry 3 --max-time 180 https://tmpfiles.org/dl/1792586122.b97f6675a62186fc/wxAHMjg92CS7/rocks-0.2.2-debug.apk --output "$RUNNER_TEMP/rocks-apk/rocks-0.2.2-debug.apk"
           cd "$RUNNER_TEMP/rocks-apk"
           echo "4cdc10bba644b44485d0260d7bff5969317ac5ea096008056e284b40c4139f33  rocks-0.2.2-debug.apk" | sha256sum --check --strict
       - name: Verify APK identity and signature
