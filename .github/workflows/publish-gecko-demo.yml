@@ -39,11 +39,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/rocks-gecko"
           cd "$RUNNER_TEMP/rocks-gecko"
           python3 - <<'PYCODE'
-          import re, subprocess, urllib.parse, urllib.request
+          import re, subprocess, urllib.parse
           pages = ["https://tmpfiles.org/wPAzM9Mp1ETl/rocks-v2-1.bin", "https://tmpfiles.org/wsAdMuMT1TJh/rocks-v2-2.bin", "https://tmpfiles.org/wGASM3MA1xdu/rocks-v2-3.bin"]
           for i, page in enumerate(pages, 1):
-              with urllib.request.urlopen(page, timeout=30) as response:
-                  html = response.read(1024 * 1024).decode('utf-8')
+              html = subprocess.check_output(['curl', '--fail', '--silent', '--show-error', '--location', '--retry', '2', '--max-time', '30', page], text=True)
               match = re.search(r'class="download" href="([^"]+)"', html)
               assert match, 'Transfer page did not provide a download'
               direct = match.group(1)
