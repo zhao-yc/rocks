@@ -3,13 +3,7 @@ pluginManagement {
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        google(); mavenCentral()
-        maven("https://maven.mozilla.org/maven2/") {
-            content { includeGroupByRegex("org\\.mozilla.*") }
-        }
-    }
+    repositories { google(); mavenCentral() }
 }
 rootProject.name = "Rocks"
 include(":core", ":android:app")
-include(":android:gecko-demo")

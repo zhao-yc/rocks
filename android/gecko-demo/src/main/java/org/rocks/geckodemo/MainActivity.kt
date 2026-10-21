@@ -319,7 +319,7 @@ private fun ExtensionManager(model: BrowserModel, onOpen: (org.mozilla.geckoview
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     if (model.busyId == choice.id) {
                         LinearProgressIndicator(Modifier.fillMaxWidth())
-                        TextButton(onClick = model::cancelInstall) { Text(stringResource(R.string.cancel)) }
+                        if (model.installing) TextButton(onClick = model::cancelInstall) { Text(stringResource(R.string.cancel)) }
                     } else if (extension == null) {
                         Button(onClick = { model.install(choice) }, enabled = model.extensionsReady && model.busyId == null) {
                             Text(stringResource(R.string.install))

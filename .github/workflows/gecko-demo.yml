@@ -16,17 +16,22 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
       - name: Check preinstalled SDK
         run: |
-          test -d "$ANDROID_HOME/platforms/android-35"
-          test -d "$ANDROID_HOME/build-tools/35.0.0"
+          test -d "$ANDROID_HOME/platforms/android-37.0" || test -d "$ANDROID_HOME/platforms/android-37"
+          test -d "$ANDROID_HOME/build-tools/36.0.0"
       - name: Prepare fixed development signing if configured
         id: signing
         env:
           ROCKS_ANDROID_SIGNING: ${{ secrets.ROCKS_ANDROID_SIGNING }}
         run: python3 scripts/android_signing.py prepare
       - name: Verify browser policy, lint and build demo
-        run: bash gradlew :core:test :android:gecko-demo:testDebugUnitTest :android:gecko-demo:lintDebug :android:gecko-demo:assembleDebug --stacktrace
+        run: |
+          node --test scripts/test-gecko-extension.mjs
+          bash gradlew --configure-on-demand :core:test --stacktrace
+          gradle -p android/gecko-demo testDebugUnitTest lintDebug assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -36,7 +41,7 @@ jobs:
             android/gecko-demo/build/reports/
       - name: Verify fixed signing when configured
         if: steps.signing.outputs.configured == 'true'
-        run: python3 scripts/android_signing.py verify --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" --apk android/gecko-demo/build/outputs/apk/debug/gecko-demo-debug.apk
+        run: python3 scripts/android_signing.py verify --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner" --apk android/gecko-demo/build/outputs/apk/debug/rocks-gecko-demo-debug.apk
       - uses: actions/upload-artifact@v4
         with:
           name: rocks-gecko-demo-apk

@@ -52,6 +52,8 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     var notice by mutableStateOf<String?>(null)
     var busyId by mutableStateOf<String?>(null)
         private set
+    var installing by mutableStateOf(false)
+        private set
     var extensionsReady by mutableStateOf(false)
         private set
     var fullScreen by mutableStateOf(false)
@@ -247,7 +249,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         session.open(runtime)
         extensions.forEach { attachExtension(tab, it) }
         tabs.add(tab)
-        if (select || tabs.size == 1) selectTab(tab.id) else session.setActive(false)
+        if (select || tabs.size == 1) selectTab(tab.id) else updateActiveSessions()
         if (url != null) { tab.url = url; session.loadUri(url) }
         return tab
     }
@@ -293,8 +295,10 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun updateActiveSessions() {
-        tabs.forEach {
-            it.session.setActive(foreground && it.id == selectedId)
+        val selected = tabs.indexOfFirst { it.id == selectedId }
+        tabs.forEachIndexed { index, it ->
+            // Adjacent pages must paint before a bottom-bar drag exposes their surfaces.
+            it.session.setActive(foreground && kotlin.math.abs(index - selected) <= 1)
             it.session.setFocused(foreground && popup == null && it.id == selectedId)
             controller.setTabActive(it.session, it.id == selectedId)
         }
@@ -312,28 +316,31 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
 
     private fun beginInstall(choice: AddonChoice) {
         busyId = choice.id
+        installing = true
         val operation = if (choice.uri == null) controller.ensureBuiltIn("resource://android/assets/paper/", choice.id)
             else controller.install(choice.uri, WebExtensionController.INSTALLATION_METHOD_MANAGER)
         pendingInstall = operation
         operation.accept({ extension ->
-            if (!disposed && busyId == choice.id) {
+            if (!disposed && pendingInstall === operation) {
                 if (extension != null && extension.id == choice.id) {
                     putExtension(extension); notify(R.string.installed_reload)
                     tabs.filter { DemoPolicy.isWebUrl(it.url) }.forEach { it.session.reload() }
                 } else notify(R.string.extensions_failed)
-                busyId = null; pendingInstall = null
+                busyId = null; installing = false; pendingInstall = null
             }
         }, { error ->
-            if (!disposed && busyId == choice.id) {
-                busyId = null; pendingInstall = null
+            if (!disposed && pendingInstall === operation) {
+                busyId = null; installing = false; pendingInstall = null
                 notice = text(R.string.install_failed, (error as? WebExtension.InstallException)?.code?.toString() ?: "—")
             }
         })
     }
 
     fun cancelInstall() {
+        if (!installing) return
         answerQuestion(false)
         busyId = null
+        installing = false
         pendingInstall?.cancel()
         pendingInstall = null
     }

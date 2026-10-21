@@ -1,12 +1,11 @@
 plugins {
-    id("com.android.application")
-    kotlin("android")
-    id("org.jetbrains.kotlin.plugin.compose")
+    id("com.android.application") version "9.1.1"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.2.10"
 }
 
 android {
     namespace = "org.rocks.geckodemo"
-    compileSdk = 35
+    compileSdk = 37
     defaultConfig {
         applicationId = "org.rocks.browser.geckodemo"
         minSdk = 29
@@ -20,7 +19,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     val privateKeyPath = providers.environmentVariable("ROCKS_ANDROID_KEYSTORE").orNull
     if (privateKeyPath != null) {
         signingConfigs.create("rocksDevelopment") {
@@ -37,6 +35,8 @@ android {
         }
     }
 }
+
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 
 dependencies {
     implementation("org.mozilla.geckoview:geckoview:158.0.20261021001945")

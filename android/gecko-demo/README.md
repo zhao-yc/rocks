@@ -22,10 +22,11 @@ Mozilla add-ons may be unreachable on some networks. Rocks Paper can be installe
 
 Bookmarks, persistent tab restore, downloads/uploads, password management, full extension-store browsing and website camera/microphone/location permissions are not implemented. Android native permission requests default to rejection; the demo does not launch arbitrary app intents, add native JavaScript bridges, or create TLS exceptions. Extension permissions require a foreground confirmation and are denied when leaving the app or dismissing the prompt.
 
-Build with JDK 17 and already installed Android SDK API 35/build-tools 35.0.0:
+This demo is a standalone Gradle project so the main browser keeps its existing build toolchain. Build with JDK 17, Gradle 9.3.1, AGP 9.1.1 and already installed Android SDK API 37/build-tools 36.0.0. SDK auto-download is disabled:
 
 ```sh
-bash gradlew :core:test :android:gecko-demo:testDebugUnitTest :android:gecko-demo:lintDebug :android:gecko-demo:assembleDebug
+node --test scripts/test-gecko-extension.mjs
+gradle -p android/gecko-demo testDebugUnitTest lintDebug assembleDebug
 ```
 
 Use the project's existing private development signing configuration. Without it, builds intentionally produce unsigned intermediates. Never publish an unsigned APK or generate a replacement key. Device/emulator execution is a separate acceptance check; compilation is not evidence of a passing device flow.
