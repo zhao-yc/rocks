@@ -1,4 +1,4 @@
-name: Publish Gecko demo APK
+name: Publish Rocks Gecko preview APK
 on:
   push:
     branches: ['build/gecko-demo-20261021']
@@ -15,8 +15,8 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      SOURCE_RUN: '39615229261'
-      SOURCE_SHA: '9e18264adae5aea38bf1667963f0a4cb024707b3'
+      SOURCE_RUN: '39631410714'
+      SOURCE_SHA: '17db69bb43fec62c74572ddd78b37df37bb68aaf'
     steps:
       - name: Verify source build and publication ancestry
         run: |
@@ -40,11 +40,7 @@ jobs:
           cd "$RUNNER_TEMP/rocks-gecko"
           python3 - <<'PYCODE'
           import re, subprocess, urllib.parse, urllib.request
-          pages = [
-              'https://tmpfiles.org/wwA9MkZGrnn1/rocks-gecko-1.bin',
-              'https://tmpfiles.org/wRAOMAZLr9UG/rocks-gecko-2.bin',
-              'https://tmpfiles.org/wsAKMKZvr7Va/rocks-gecko-3.bin',
-          ]
+          pages = ["https://tmpfiles.org/wPAzM9Mp1ETl/rocks-v2-1.bin", "https://tmpfiles.org/wsAdMuMT1TJh/rocks-v2-2.bin", "https://tmpfiles.org/wGASM3MA1xdu/rocks-v2-3.bin"]
           for i, page in enumerate(pages, 1):
               with urllib.request.urlopen(page, timeout=30) as response:
                   html = response.read(1024 * 1024).decode('utf-8')
@@ -56,15 +52,15 @@ jobs:
               assert re.fullmatch(r'/dl/[A-Za-z0-9/._-]+', parsed.path)
               subprocess.run(['curl', '--fail', '--location', '--retry', '2', '--max-time', '120', direct, '--output', f'part-{i}.bin'], check=True)
           PYCODE
-          cat part-1.bin part-2.bin part-3.bin > rocks-gecko-demo-0.1.0.apk
-          echo '742aec33cf2de22db9301db2c4da0af3851b09b2f29aaed6a024da2f10b78a43  rocks-gecko-demo-0.1.0.apk' > rocks-gecko-demo-0.1.0.apk.sha256
-          sha256sum --check --strict rocks-gecko-demo-0.1.0.apk.sha256
+          cat part-1.bin part-2.bin part-3.bin > rocks-gecko-0.2.0.apk
+          echo '77d72c9149562bc8c2b362758fe3e2410d0ede6e80468a77e88800b9906f62fb  rocks-gecko-0.2.0.apk' > rocks-gecko-0.2.0.apk.sha256
+          sha256sum --check --strict rocks-gecko-0.2.0.apk.sha256
       - name: Verify fixed certificate, package and bundled extension
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/rocks-gecko"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs rocks-gecko-demo-0.1.0.apk > certs.txt
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging rocks-gecko-demo-0.1.0.apk > badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs rocks-gecko-0.2.0.apk > certs.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging rocks-gecko-0.2.0.apk > badging.txt
           python3 - <<'PY'
           import json, re, zipfile
           from pathlib import Path
@@ -72,8 +68,8 @@ jobs:
           assert certs == ['61fd4f1cf391cb98b53030f008aa0dd57dae4a91fac1bf3525f8db013065acaf']
           package = Path('badging.txt').read_text().splitlines()[0]
           assert "name='org.rocks.browser.geckodemo'" in package
-          assert "versionCode='1'" in package and "versionName='0.1.0-gecko'" in package
-          with zipfile.ZipFile('rocks-gecko-demo-0.1.0.apk') as z:
+          assert "versionCode='2'" in package and "versionName='0.2.0-gecko'" in package
+          with zipfile.ZipFile('rocks-gecko-0.2.0.apk') as z:
               assert z.testzip() is None
               assert any(n.endswith('/libxul.so') for n in z.namelist())
               assert json.loads(z.read('assets/paper/manifest.json'))['browser_specific_settings']['gecko']['id'] == 'paper@rocks.demo'
@@ -83,22 +79,25 @@ jobs:
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
-          Rocks Firefox 引擎与 WebExtensions 体验版，Android 10+ / ARM64。
+          Rocks Gecko 0.2.0 开发预览版，Android 10+ / ARM64。
 
-          独立包名 org.rocks.browser.geckodemo，可与现有 Rocks 同时安装，不用卸载旧版。
+          可直接覆盖安装 Gecko Demo 0.1，沿用包名与固定签名，不需要卸载，保留 Gecko 扩展及其设置。
 
-          体验步骤：
-          1. 在底部地址栏左右拖动，体验页面跟手切换、短滑回弹和快速切换相邻标签。
-          2. 打开扩展中心，确认安装 Rocks Paper，再打开 Example.org，进入扩展面板切换纸张背景与文字间距。
-          3. 联网安装 Mozilla 源的 Dark Reader / uBlock Origin，体验其真实面板以及禁用、启用、卸载。扩展和设置会在重启后保留。
+          本轮新增：
+          - 自动恢复标签网址、标题、当前标签、书签、历史及搜索引擎设置，损坏或未来版本数据保留原件。
+          - 全屏卡片标签总览、最多 24 个标签、后台标签按需加载，底部地址栏拖动切换。
+          - 书签、网址历史、搜索引擎设置；链接长按前台/后台打开、复制、分享。
+          - 下载确认及系统保存位置选择，保存原始 Gecko 响应流以保留登录状态；显示进度与取消。
+          - 网站文件上传，通过系统文件选择器授权单文件或最多 20 个文件，页面/标签变化时拒绝过期请求。
+          - 扩展手动检查更新，新增权限需确认；保留 Paper / Dark Reader / uBlock Origin 及真实面板。
 
-          本包使用未修改的 GeckoView 158.0.20261021001945。不是 Mozilla 官方产品，也不是 Chrome 扩展商店。官方扩展需要能访问 Mozilla 下载源；Rocks Paper 随包提供，无需联网下载。
+          下载过程中请保持应用运行；中断或取消可能留下不完整文件，下载任务列表仅限本次运行。
+          重启恢复网址与标题，不恢复表单、滚动位置或前后退栈。暂不提供密码管理、账户同步、网站摄像头/麦克风/定位授权及无痕模式。
 
-          Demo 最多 8 个普通标签，标签仅在本次进程运行期间保留；暂未提供书签、下载管理、上传、网站硬件权限和无痕模式。单元测试、扩展脚本逻辑测试、lint、APK 编译通过；尚未在真机/模拟器执行端到端验收。
-
-          采用已保留的固定开发签名（与 0.2.2-dev 相同证书）；CI Secret 尚待配置，本次包由受控工作区签名，发布时再次校验哈希与证书。
-          源码及组件许可：https://github.com/zhao-yc/rocks/blob/build/gecko-demo-20261021/android/gecko-demo/README.md
-          源码提交：9e18264adae5aea38bf1667963f0a4cb024707b3。
+          47 项 JVM 测试、2 项扩展脚本逻辑测试、lint（0 错误）、APK 编译通过。尚未执行真机/模拟器端到端验收。
+          固定开发签名证书与 0.1 相同；CI Secret 尚待配置，本次由受控工作区签名，发布时再次校验文件哈希、包名、版本和证书。
+          源码、数据与组件许可：https://github.com/zhao-yc/rocks/blob/build/gecko-demo-20261021/android/gecko-demo/README.md
+          源码提交：17db69bb43fec62c74572ddd78b37df37bb68aaf。
           NOTES
           cd "$RUNNER_TEMP/rocks-gecko"
-          gh release create v0.1.0-gecko-demo rocks-gecko-demo-0.1.0.apk rocks-gecko-demo-0.1.0.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Rocks Gecko Demo 0.1.0' --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md"
+          gh release create v0.2.0-gecko rocks-gecko-0.2.0.apk rocks-gecko-0.2.0.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Rocks Gecko 0.2.0 Preview' --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md"
