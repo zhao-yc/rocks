@@ -4,6 +4,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DemoPolicyTest {
+    @Test fun pickerCannotInjectFileUrisOrSilentlyTruncateAMultipleSelection() {
+        assertTrue(DemoPolicy.canUpload(listOf("content"), false))
+        assertTrue(DemoPolicy.canUpload(List(20) { "content" }, true))
+        assertFalse(DemoPolicy.canUpload(listOf("content", "file"), true))
+        assertFalse(DemoPolicy.canUpload(List(21) { "content" }, true))
+        assertFalse(DemoPolicy.canUpload(listOf("content", "content"), false))
+    }
     @Test fun addressInputCannotLoadPrivilegedOrExternalSchemes() {
         listOf("javascript:alert(1)", "file:///data/data/secret", "intent://app", "moz-extension://id/popup.html", "about:config").forEach {
             assertNull(DemoPolicy.inputUrl(it))

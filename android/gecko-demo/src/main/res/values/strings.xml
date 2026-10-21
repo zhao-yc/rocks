@@ -92,4 +92,5 @@
     <string name="download_incomplete">下载未完成，目标文件可能不完整</string>
     <string name="download_session_note">这里显示本次运行期间的下载任务，文件保存在你选择的位置。</string>
     <string name="website_dialog">来自网站 %1$s 的提示</string>
+    <string name="bookmark_limit">最多保存 200 个书签，请先移除一个。</string>
 </resources>

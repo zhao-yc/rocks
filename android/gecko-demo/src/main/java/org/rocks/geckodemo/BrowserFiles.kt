@@ -61,8 +61,9 @@ internal class BrowserFiles(
         if (pending.prompt.isComplete) {
             pending.result.completeExceptionally(CancellationException("Page dismissed the file request")); return
         }
-        val selected = uris.filter { it.scheme == "content" }.take(20)
-        val valid = selected.isNotEmpty() && selectedPage(pending.session) == pending.page
+        val selected = uris
+        val valid = DemoPolicy.canUpload(uris.map { it.scheme }, pending.prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE) && selectedPage(pending.session) == pending.page
+        if (uris.isNotEmpty() && !valid) notify(R.string.file_failed)
         val response = runCatching {
             if (!valid) pending.prompt.dismiss()
             else if (pending.prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE)

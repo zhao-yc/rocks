@@ -295,7 +295,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                     linkMenu = LinkTarget(tab.id, url, element.linkText ?: element.title ?: url)
             }
             override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
-                if (foreground) files.requestDownload(session, response) else response.body?.close()
+                if (foreground) files.requestDownload(session, response) else runCatching { response.body?.close() }
             }
         }
         session.promptDelegate = object : GeckoSession.PromptDelegate {
@@ -433,8 +433,8 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         if (!DemoPolicy.isWebUrl(current.url)) return
         val removed = bookmarks.removeAll { it.url == current.url }
         if (!removed) {
+            if (bookmarks.size >= 200) { notify(R.string.bookmark_limit); return }
             bookmarks.add(0, PageRecord(current.url, current.title.take(512), System.currentTimeMillis()))
-            while (bookmarks.size > 200) bookmarks.removeAt(bookmarks.lastIndex)
         }
         save(); notify(if (removed) R.string.bookmark_removed else R.string.bookmark_added)
     }
@@ -453,13 +453,17 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         if (target.tabId == selectedId) newTab(target.url, select = !background)
     }
 
+    private fun reloadWebTabs() {
+        tabs.filter { it.pendingUrl == null && DemoPolicy.isWebUrl(it.url) && it.session.isOpen }.forEach { it.session.reload() }
+    }
+
     fun updateExtension(extension: WebExtension) {
         if (busyId != null || extension.isBuiltIn) return
         busyId = extension.id
         controller.update(extension).accept({ updated ->
             if (!disposed) {
                 busyId = null
-                if (updated != null) { putExtension(updated); notify(R.string.extension_updated) }
+                if (updated != null) { putExtension(updated); reloadWebTabs(); notify(R.string.extension_updated) }
                 else notify(R.string.extension_latest)
             }
         }, { busyId = null; notify(R.string.extensions_failed) })
@@ -485,7 +489,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             if (!disposed && pendingInstall === operation) {
                 if (extension != null && extension.id == choice.id) {
                     putExtension(extension); notify(R.string.installed_reload)
-                    tabs.filter { DemoPolicy.isWebUrl(it.url) }.forEach { it.session.reload() }
+                    reloadWebTabs()
                 } else notify(R.string.extensions_failed)
                 busyId = null; installing = false; pendingInstall = null
             }
@@ -515,7 +519,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             if (!disposed) {
                 if (result != null) putExtension(result)
                 busyId = null
-                tabs.filter { DemoPolicy.isWebUrl(it.url) }.forEach { it.session.reload() }
+                reloadWebTabs()
                 notify(R.string.changed_reload)
             }
         }, { busyId = null; notify(R.string.extensions_failed) })
@@ -530,7 +534,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                 controller.uninstall(extension).accept({
                     extensions.removeAll { it.id == extension.id }; clearActions(extension.id)
                     busyId = null
-                    tabs.filter { DemoPolicy.isWebUrl(it.url) }.forEach { it.session.reload() }
+                    reloadWebTabs()
                 }, { busyId = null; notify(R.string.extensions_failed) })
             }
         }

@@ -20,6 +20,9 @@ internal object DemoPolicy {
     fun safeFilename(name: String?): String = name.orEmpty().substringAfterLast('/').substringAfterLast('\\')
         .replace(Regex("[\\p{Cntrl}:*?\"<>|]"), "_").trim().trim('.').take(120).ifBlank { "download" }
 
+    fun canUpload(schemes: List<String?>, multiple: Boolean): Boolean =
+        schemes.size in 1..(if (multiple) 20 else 1) && schemes.all { it == "content" }
+
     fun canLoad(value: String, extensionBase: String? = null): Boolean =
         value == HOME || isWebUrl(value) ||
             (extensionBase?.startsWith("moz-extension://") == true &&

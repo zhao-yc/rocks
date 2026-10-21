@@ -92,4 +92,5 @@
     <string name="download_incomplete">Download incomplete; the destination may be incomplete</string>
     <string name="download_session_note">Tasks from this process are shown here. Files are saved at your chosen destination.</string>
     <string name="website_dialog">Message from %1$s</string>
+    <string name="bookmark_limit">Up to 200 bookmarks are supported. Remove one before adding another.</string>
 </resources>
