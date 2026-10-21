@@ -1,0 +1,89 @@
+name: Publish Gecko demo APK
+on:
+  push:
+    branches: ['build/gecko-demo-20261021']
+    paths: ['.github/workflows/publish-gecko-demo.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SOURCE_RUN: '39615229261'
+      SOURCE_SHA: '9e18264adae5aea38bf1667963f0a4cb024707b3'
+    steps:
+      - name: Verify source build and publication ancestry
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/source-run.json"
+          gh api "repos/$GITHUB_REPOSITORY/compare/$SOURCE_SHA...$GITHUB_SHA" > "$RUNNER_TEMP/publish-diff.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          run = json.loads((root / 'source-run.json').read_text())
+          assert run['head_sha'] == os.environ['SOURCE_SHA'] and run['conclusion'] == 'success'
+          diff = json.loads((root / 'publish-diff.json').read_text())
+          assert diff['status'] in ('ahead', 'identical')
+          assert all(f['filename'] == '.github/workflows/publish-gecko-demo.yml' for f in diff['files']), 'Runtime source changed after build'
+          PY
+      - name: Retrieve the locally signed APK and verify its digest
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rocks-gecko"
+          cd "$RUNNER_TEMP/rocks-gecko"
+          curl --fail --location --retry 2 --max-time 120 'https://tmpfiles.org/dl/1792592909.2a3b762f5e640c82/wwA9MkZGrnn1/rocks-gecko-1.bin' --output part-1.bin
+          curl --fail --location --retry 2 --max-time 120 'https://tmpfiles.org/dl/1792592909.3546da9a997df2e5/wRAOMAZLr9UG/rocks-gecko-2.bin' --output part-2.bin
+          curl --fail --location --retry 2 --max-time 120 'https://tmpfiles.org/dl/1792592909.36e0356a8937a0e5/wsAKMKZvr7Va/rocks-gecko-3.bin' --output part-3.bin
+          cat part-1.bin part-2.bin part-3.bin > rocks-gecko-demo-0.1.0.apk
+          echo '742aec33cf2de22db9301db2c4da0af3851b09b2f29aaed6a024da2f10b78a43  rocks-gecko-demo-0.1.0.apk' > rocks-gecko-demo-0.1.0.apk.sha256
+          sha256sum --check --strict rocks-gecko-demo-0.1.0.apk.sha256
+      - name: Verify fixed certificate, package and bundled extension
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/rocks-gecko"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs rocks-gecko-demo-0.1.0.apk > certs.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging rocks-gecko-demo-0.1.0.apk > badging.txt
+          python3 - <<'PY'
+          import json, re, zipfile
+          from pathlib import Path
+          certs = re.findall(r'^Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)$', Path('certs.txt').read_text(), re.M)
+          assert certs == ['61fd4f1cf391cb98b53030f008aa0dd57dae4a91fac1bf3525f8db013065acaf']
+          package = Path('badging.txt').read_text().splitlines()[0]
+          assert "name='org.rocks.browser.geckodemo'" in package
+          assert "versionCode='1'" in package and "versionName='0.1.0-gecko'" in package
+          with zipfile.ZipFile('rocks-gecko-demo-0.1.0.apk') as z:
+              assert z.testzip() is None
+              assert any(n.endswith('/libxul.so') for n in z.namelist())
+              assert json.loads(z.read('assets/paper/manifest.json'))['browser_specific_settings']['gecko']['id'] == 'paper@rocks.demo'
+          print(package)
+          PY
+      - name: Publish public demo release
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+          Rocks Firefox 引擎与 WebExtensions 体验版，Android 10+ / ARM64。
+
+          独立包名 org.rocks.browser.geckodemo，可与现有 Rocks 同时安装，不用卸载旧版。
+
+          体验步骤：
+          1. 在底部地址栏左右拖动，体验页面跟手切换、短滑回弹和快速切换相邻标签。
+          2. 打开扩展中心，确认安装 Rocks Paper，再打开 Example.org，进入扩展面板切换纸张背景与文字间距。
+          3. 联网安装 Mozilla 源的 Dark Reader / uBlock Origin，体验其真实面板以及禁用、启用、卸载。扩展和设置会在重启后保留。
+
+          本包使用未修改的 GeckoView 158.0.20261021001945。不是 Mozilla 官方产品，也不是 Chrome 扩展商店。官方扩展需要能访问 Mozilla 下载源；Rocks Paper 随包提供，无需联网下载。
+
+          Demo 最多 8 个普通标签，标签仅在本次进程运行期间保留；暂未提供书签、下载管理、上传、网站硬件权限和无痕模式。单元测试、扩展脚本逻辑测试、lint、APK 编译通过；尚未在真机/模拟器执行端到端验收。
+
+          采用已保留的固定开发签名（与 0.2.2-dev 相同证书）；CI Secret 尚待配置，本次包由受控工作区签名，发布时再次校验哈希与证书。
+          源码及组件许可：https://github.com/zhao-yc/rocks/blob/build/gecko-demo-20261021/android/gecko-demo/README.md
+          源码提交：9e18264adae5aea38bf1667963f0a4cb024707b3。
+          NOTES
+          cd "$RUNNER_TEMP/rocks-gecko"
+          gh release create v0.1.0-gecko-demo rocks-gecko-demo-0.1.0.apk rocks-gecko-demo-0.1.0.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Rocks Gecko Demo 0.1.0' --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md"
