@@ -27,6 +27,8 @@ No account sync, password vault, AI, desktop app, extension store or page ad fil
 
 Requires JDK 17 and Android SDK packages `platform-tools`, `platforms;android-35`, `build-tools;35.0.0`. Review SDK licenses when installing. Set `JAVA_HOME` and `ANDROID_HOME`, or use ignored `local.properties` with `sdk.dir`. No machine paths are committed.
 
+From 0.2.2-dev, distributable testing APKs use one private development key with a pinned certificate. Configure the repository secret or local signing environment as described in [signing setup](docs/Android签名.md). Builds without this configuration produce unsigned intermediates instead of silently generating a different key. Keep a private offline backup; the earlier temporary keys cannot be recovered.
+
 ```powershell
 .\gradlew.bat :core:test :android:app:testDebugUnitTest :android:app:lintDebug :android:app:assembleDebug
 # With an authorized device/emulator:
