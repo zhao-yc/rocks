@@ -22,6 +22,7 @@ import org.mozilla.geckoview.WebResponse
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
 import org.mozilla.geckoview.WebRequestError
@@ -34,10 +35,16 @@ internal class BrowserTab(val id: Long, val session: GeckoSession, val extension
     var canGoForward by mutableStateOf(false)
     var error by mutableStateOf(false)
     var pendingUrl: String? = null
+    var documentRevision = 0L
+    var desktop by mutableStateOf(false)
+    var recordingCamera by mutableStateOf(false)
+    var recordingMicrophone by mutableStateOf(false)
 }
 
 internal data class ExtensionPopup(val session: GeckoSession, val extensionId: String, val title: String)
-internal data class PermissionQuestion(val title: String, val body: String, val answer: (Boolean) -> Unit)
+internal data class PermissionQuestion(val title: String, val body: String, val answer: (Boolean) -> Unit) {
+    var onShown: () -> Unit = {}
+}
 internal data class AddonChoice(val id: String, val name: String, val description: Int, val uri: String?)
 internal data class LinkTarget(val tabId: Long, val url: String, val title: String)
 
@@ -103,6 +110,53 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     val files = BrowserFiles(application, viewModelScope, { session ->
         tabs.firstOrNull { it.session === session && it.id == selectedId && !restoring && !disposed }?.url
     }, ::notify)
+
+    private val externalLinks = ArrayDeque<String>()
+    fun pageScope(session: GeckoSession): BrowserPageScope? {
+        val tab = tabs.firstOrNull { it.session === session && it.id == selectedId } ?: return null
+        if (restoring || disposed || !foreground || tab.extensionBase != null) return null
+        return BrowserPageScope(tab.id, tab.documentRevision, tab.url)
+    }
+    val finder = BrowserFind(viewModelScope) {
+        tabs.firstOrNull { it.id == selectedId }?.let { tab -> pageScope(tab.session)?.let { it to tab.session } }
+    }
+    val sitePermissions = SitePermissions(application, runtime, ::pageScope) { title, body, shown, answer ->
+        if (!foreground || disposed || question != null) false
+        else { question = PermissionQuestion(title, body, answer).also { it.onShown = shown }; true }
+    }
+    fun openExternalUrl(url: String) {
+        if (BrowserEntryPolicy.externalUrl("android.intent.action.VIEW", url) == null) { notify(R.string.unsupported_link); return }
+        if (restoring) {
+            if (externalLinks.size < 8) externalLinks.addLast(url) else notify(R.string.tab_limit)
+            return
+        }
+        if (tabs.size == 1 && current.url == DemoPolicy.HOME) navigate(url) else newTab(url)
+    }
+    fun toggleDesktop() {
+        val tab = current
+        if (!DemoPolicy.isWebUrl(tab.url)) return
+        sitePermissions.cancel(); answerQuestion(false); finder.close()
+        tab.desktop = !tab.desktop
+        tab.session.settings.userAgentMode = if (tab.desktop) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
+        tab.session.settings.viewportMode = if (tab.desktop) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE
+        resetToolbar(); tab.session.reload()
+    }
+    fun resetCurrentSitePermissions() {
+        val tab = current
+        val expected = pageScope(tab.session) ?: return
+        if (BrowserEntryPolicy.secureOrigin(tab.url) == null || question != null) return
+        question = PermissionQuestion(text(R.string.reset_site_permissions), text(R.string.reset_site_permissions_note), { allow ->
+            if (allow && pageScope(tab.session) == expected) {
+                sitePermissions.cancel()
+                sitePermissions.resetLocation(expected.url) { success ->
+                    if (pageScope(tab.session) == expected) {
+                        if (success) { tab.session.reload(); notify(R.string.site_permissions_reset) }
+                        else notify(R.string.site_permission_failed)
+                    }
+                }
+            }
+        })
+    }
 
     private fun text(id: Int, vararg args: Any) = getApplication<Application>().getString(id, *args)
     fun notify(id: Int) { notice = text(id) }
@@ -253,7 +307,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         if (url != null && !DemoPolicy.canLoad(url, extensionBase)) return null
         val session = GeckoSession()
         val tab = BrowserTab(nextId++, session, extensionBase)
-        session.permissionDelegate = deniedPermissions
+        session.permissionDelegate = if (extensionBase == null) sitePermissions else deniedPermissions
         session.navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
                 if (request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW &&
@@ -264,7 +318,10 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             }
             override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
                 if (url != null) {
-                    if (tab.url != url && tab.id == selectedId) { files.cancelPrompts(); answerQuestion(false); linkMenu = null }
+                    if (tab.url != url) {
+                        tab.documentRevision++
+                        if (tab.id == selectedId) { sitePermissions.cancel(); finder.close(); files.cancelPrompts(); answerQuestion(false); linkMenu = null }
+                    }
                     if (tab.url != url && tab.id == selectedId) resetToolbar()
                     tab.url = url; save()
                 }
@@ -283,7 +340,8 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 tab.error = false; tab.progress = 5
-                if (tab.id == selectedId) resetToolbar()
+                tab.documentRevision++
+                if (tab.id == selectedId) { sitePermissions.cancel(); finder.close(); answerQuestion(false); resetToolbar() }
             }
             override fun onProgressChange(session: GeckoSession, progress: Int) { tab.progress = progress }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
@@ -295,6 +353,13 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                     while (history.size > 500) history.removeAt(history.lastIndex)
                     save()
                 }
+            }
+        }
+        session.mediaDelegate = object : GeckoSession.MediaDelegate {
+            override fun onRecordingStatusChanged(session: GeckoSession, devices: Array<GeckoSession.MediaDelegate.RecordingDevice>) {
+                tab.recordingCamera = devices.any { it.type == GeckoSession.MediaDelegate.RecordingDevice.Type.CAMERA && it.status == GeckoSession.MediaDelegate.RecordingDevice.Status.RECORDING }
+                tab.recordingMicrophone = devices.any { it.type == GeckoSession.MediaDelegate.RecordingDevice.Type.MICROPHONE && it.status == GeckoSession.MediaDelegate.RecordingDevice.Status.RECORDING }
+                if (tab.id == selectedId && (tab.recordingCamera || tab.recordingMicrophone)) expandToolbar()
             }
         }
         session.compositorScrollDelegate = object : GeckoSession.CompositorScrollDelegate {
@@ -375,6 +440,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     fun selectTab(id: Long) {
         if (tabs.none { it.id == id }) return
         if (selectedId != id) {
+            sitePermissions.cancel(); finder.close()
             resetToolbar()
             if (fullScreen) tabs.firstOrNull { it.id == selectedId }?.session?.exitFullScreen()
             fullScreen = false
@@ -390,6 +456,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     fun closeTab(id: Long) {
         val index = tabs.indexOfFirst { it.id == id }
         if (index < 0) return
+        if (selectedId == id) { sitePermissions.cancel(); finder.close(); answerQuestion(false) }
         files.cancelPrompts(); linkMenu = null
         if (selectedId == id) { closePopup(); fullScreen = false }
         val removed = tabs.removeAt(index)
@@ -403,6 +470,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
 
     fun navigate(input: String): Boolean {
         val url = DemoPolicy.inputUrl(input, searchEngine) ?: run { notify(R.string.unsupported_link); return false }
+        sitePermissions.cancel(); finder.close(); current.documentRevision++
         files.cancelPrompts(); answerQuestion(false); linkMenu = null
         current.pendingUrl = null
         closePopup(); current.url = url; current.error = false; current.session.loadUri(url)
@@ -410,9 +478,10 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         return true
     }
 
-    fun home() { files.cancelPrompts(); current.pendingUrl = null; current.url = DemoPolicy.HOME; current.error = false; current.session.loadUri(DemoPolicy.HOME); save() }
+    fun home() { sitePermissions.cancel(); finder.close(); current.documentRevision++; files.cancelPrompts(); current.pendingUrl = null; current.url = DemoPolicy.HOME; current.error = false; current.session.loadUri(DemoPolicy.HOME); save() }
     fun back() { if (fullScreen) current.session.exitFullScreen() else if (current.canGoBack) current.session.goBack() }
     fun reload() {
+        sitePermissions.cancel(); finder.close(); current.documentRevision++; answerQuestion(false)
         current.error = false
         if (!current.session.isOpen) { current.session.open(runtime); current.session.loadUri(current.url) }
         else current.session.reload()
@@ -420,6 +489,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
 
     fun setForeground(value: Boolean) {
         foreground = value
+        if (value) sitePermissions.resumed() else sitePermissions.backgrounded()
         if (!value) { answerQuestion(false); closePopup(); files.backgrounded(); linkMenu = null; saveImmediately() }
         updateActiveSessions()
     }
@@ -609,6 +679,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             }
             restoring = false
             updateActiveSessions()
+            while (externalLinks.isNotEmpty()) openExternalUrl(externalLinks.removeFirst())
             if (storageReadOnly) notify(R.string.restore_failed) else save()
             storage.writeFailed.collect { saveFailed = it }
         }
@@ -619,6 +690,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     override fun onCleared() {
         saveImmediately()
         disposed = true
+        sitePermissions.cancel(); finder.close()
         files.cancelPrompts()
         answerQuestion(false); cancelInstall(); closePopup()
         extensions.forEach { it.setActionDelegate(null); it.setTabDelegate(null) }

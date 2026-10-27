@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (savedInstanceState == null) handleWebIntent(intent)
         setContent {
             MaterialTheme(colorScheme = lightColorScheme(
                 primary = Color(0xFF35614B), onPrimary = Color.White,
@@ -67,6 +68,20 @@ class MainActivity : ComponentActivity() {
                 onSurface = Color(0xFF202822), onSurfaceVariant = Color(0xFF526451),
             )) { BrowserScreen(browser) }
         }
+    }
+    private fun handleWebIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val url = BrowserEntryPolicy.externalUrl(intent.action, intent.dataString)
+        if (url != null) browser.openExternalUrl(url) else browser.notify(R.string.unsupported_link)
+    }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleWebIntent(intent)
+    }
+    override fun onStop() {
+        if (!isChangingConfigurations) browser.sitePermissions.cancel()
+        super.onStop()
     }
     override fun onResume() { super.onResume(); browser.setForeground(true) }
     override fun onPause() { browser.setForeground(false); super.onPause() }
@@ -86,6 +101,7 @@ private fun BrowserScreen(model: BrowserModel) {
     var showExtensions by remember { mutableStateOf(false) }
     var showTabs by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showSitePermissions by remember { mutableStateOf(false) }
     var library by remember { mutableStateOf<LibraryPage?>(null) }
     val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val data = result.data
@@ -122,6 +138,18 @@ private fun BrowserScreen(model: BrowserModel) {
             }
         }
     }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        model.sitePermissions.nativeResult()
+    }
+    LaunchedEffect(model.sitePermissions.nativeRequest) {
+        model.sitePermissions.nativeRequest?.let { request ->
+            if (!request.launched) {
+                request.launched = true
+                runCatching { permissionLauncher.launch(request.permissions) }
+                    .onFailure { model.sitePermissions.nativeResult() }
+            }
+        }
+    }
     var editing by remember { mutableStateOf(false) }
     var address by remember { mutableStateOf(TextFieldValue()) }
     val focusRequester = remember { FocusRequester() }
@@ -139,6 +167,7 @@ private fun BrowserScreen(model: BrowserModel) {
     val touchExploration = rememberTouchExploration()
     val chromePinned = editing || keyboardVisible || showExtensions || showTabs || showMenu || library != null ||
         model.popup != null || model.question != null || model.linkMenu != null || model.files.offer != null ||
+        model.finder.visible || showSitePermissions || model.sitePermissions.nativeRequest != null || current.recordingCamera || current.recordingMicrophone ||
         current.url == DemoPolicy.HOME || touchExploration || density.fontScale > 1.3f
     val compact = model.toolbarCollapsed && !chromePinned
     SideEffect { model.setToolbarInteraction(chromePinned, draggingTabs) }
@@ -194,10 +223,11 @@ private fun BrowserScreen(model: BrowserModel) {
         if (model.fullScreen) controller.hide(WindowInsetsCompat.Type.systemBars())
         else controller.show(WindowInsetsCompat.Type.systemBars())
     }
-    BackHandler(enabled = model.popup != null || editing || model.fullScreen || current.canGoBack) {
+    BackHandler(enabled = model.popup != null || editing || model.finder.visible || model.fullScreen || current.canGoBack) {
         when {
             model.popup != null -> model.closePopup()
             editing -> finishEditing()
+            model.finder.visible -> { model.finder.close(); keyboard?.hide(); focusManager.clearFocus() }
             else -> model.back()
         }
     }
@@ -250,6 +280,7 @@ private fun BrowserScreen(model: BrowserModel) {
                     menuExpanded = showMenu, onDismissMenu = { showMenu = false },
                     onExtensions = { showMenu = false; showExtensions = true },
                     onLibrary = { showMenu = false; library = it },
+                    onSitePermissions = { showMenu = false; showSitePermissions = true },
                     onShare = {
                         context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"; putExtra(Intent.EXTRA_TEXT, current.url)
@@ -262,6 +293,9 @@ private fun BrowserScreen(model: BrowserModel) {
         }
     }
 
+    if (showSitePermissions) {
+        ModalBottomSheet(onDismissRequest = { showSitePermissions = false }) { SitePermissionPanel(model) }
+    }
     if (showExtensions) {
         ModalBottomSheet(onDismissRequest = { showExtensions = false }) {
             ExtensionManager(model, onOpen = { extension -> showExtensions = false; model.openExtension(extension) })
@@ -305,6 +339,7 @@ private fun BrowserScreen(model: BrowserModel) {
         }
     }
     model.question?.let { question ->
+        LaunchedEffect(question) { question.onShown() }
         AlertDialog(onDismissRequest = { model.answerQuestion(false) }, title = { Text(question.title) },
             text = { Text(question.body, Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) },
             confirmButton = { TextButton(onClick = { model.answerQuestion(true) }) { Text(stringResource(R.string.allow)) } },

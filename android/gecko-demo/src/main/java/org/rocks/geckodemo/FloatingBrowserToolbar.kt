@@ -48,9 +48,9 @@ internal fun rememberTouchExploration(): Boolean {
 internal fun FloatingBrowserToolbar(
     model: BrowserModel, compact: Boolean, editing: Boolean,
     address: TextFieldValue, onAddressChange: (TextFieldValue) -> Unit, focusRequester: FocusRequester,
-    addressGesture: Modifier, onAddress: () -> Unit, onSubmit: () -> Unit, onCancel: () -> Unit,
+    addressModifier: Modifier, onAddress: () -> Unit, onSubmit: () -> Unit, onCancel: () -> Unit,
     onTabs: () -> Unit, onMenu: () -> Unit, menuExpanded: Boolean, onDismissMenu: () -> Unit,
-    onExtensions: () -> Unit, onLibrary: (LibraryPage) -> Unit, onShare: () -> Unit,
+    onExtensions: () -> Unit, onLibrary: (LibraryPage) -> Unit, onSitePermissions: () -> Unit, onShare: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val current = model.current
@@ -68,7 +68,9 @@ internal fun FloatingBrowserToolbar(
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)),
             shadowElevation = 9.dp) {
-            if (editing) {
+            if (model.finder.visible) {
+                FindInPageControls(model)
+            } else if (editing) {
                 Row(Modifier.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(value = address, onValueChange = onAddressChange, singleLine = true,
                         placeholder = { Text(stringResource(R.string.address_hint)) },
@@ -79,7 +81,7 @@ internal fun FloatingBrowserToolbar(
                     TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
                 }
             } else if (compact) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).then(addressGesture)
+                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).then(addressModifier)
                     .clickable(onClickLabel = expandLabel, role = Role.Button, onClick = onAddress)
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
@@ -94,11 +96,16 @@ internal fun FloatingBrowserToolbar(
                     IconButton(onClick = model::back, enabled = current.canGoBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back))
                     }
-                    Row(Modifier.weight(1f).heightIn(min = 48.dp).then(addressGesture)
+                    Row(Modifier.weight(1f).heightIn(min = 48.dp).then(addressModifier)
                         .clickable(onClickLabel = editLabel, role = Role.Button, onClick = onAddress)
                         .padding(horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (current.url.startsWith("https://")) Icons.Outlined.Lock else Icons.Outlined.Language,
-                            null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
+                        Icon(when {
+                            current.recordingCamera -> Icons.Outlined.Videocam
+                            current.recordingMicrophone -> Icons.Outlined.Mic
+                            current.url.startsWith("https://") -> Icons.Outlined.Lock
+                            else -> Icons.Outlined.Language
+                        }, if (current.recordingCamera || current.recordingMicrophone) stringResource(R.string.recording_active) else null,
+                            Modifier.size(15.dp), tint = if (current.recordingCamera || current.recordingMicrophone) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                         Text(host, Modifier.weight(1f).padding(start = 7.dp), maxLines = 1,
                             overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium)
@@ -120,6 +127,17 @@ internal fun FloatingBrowserToolbar(
                                 onClick = { onDismissMenu(); current.session.goForward() })
                             DropdownMenuItem(text = { Text(stringResource(R.string.extensions)) },
                                 leadingIcon = { Icon(Icons.Outlined.Extension, null) }, onClick = onExtensions)
+                            DropdownMenuItem(text = { Text(stringResource(R.string.find_in_page)) },
+                                leadingIcon = { Icon(Icons.Outlined.Search, null) }, enabled = DemoPolicy.isWebUrl(current.url),
+                                onClick = { onDismissMenu(); model.finder.open(); model.expandToolbar() })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.desktop_site)) },
+                                leadingIcon = { Icon(Icons.Outlined.DesktopWindows, null) },
+                                trailingIcon = { Checkbox(checked = current.desktop, onCheckedChange = null) },
+                                enabled = DemoPolicy.isWebUrl(current.url),
+                                onClick = { onDismissMenu(); model.toggleDesktop() })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.site_permissions)) },
+                                leadingIcon = { Icon(Icons.Outlined.Security, null) }, enabled = DemoPolicy.isWebUrl(current.url),
+                                onClick = onSitePermissions)
                             val bookmarked = model.bookmarks.any { it.url == current.url }
                             DropdownMenuItem(text = { Text(stringResource(if (bookmarked) R.string.remove_bookmark else R.string.bookmark_current)) },
                                 enabled = DemoPolicy.isWebUrl(current.url),

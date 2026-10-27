@@ -1,6 +1,25 @@
 # Rocks Gecko development preview
 
-The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.3.0-gecko (code 3) can update the 0.1/0.2 demo without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
+The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.0-gecko (code 4) can update the 0.1/0.2/0.3 demo without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
+
+## 0.4 everyday browser entry points
+
+- Settings offers Android's default-browser chooser and reads the actual role state again on return. The app never claims the role before Android grants it.
+- A single browser Activity handles HTTP/HTTPS VIEW/BROWSABLE intents on cold and warm starts. External links open in a new tab (or reuse the sole empty start page), after portable data restoration. A bounded queue protects restoration; reaching the tab limit leaves existing pages intact. Extras, search text and non-web schemes are not interpreted as navigation commands.
+- More → Find in page uses Gecko's native finder: highlighted matches, match counts, previous/next with wrapping, empty query clearing and Android Back to close. Requests/results are bound to the active tab and document; switching pages clears old highlights. The search strip remains above the keyboard.
+- More → Desktop site changes both Gecko user-agent mode and viewport mode, then reloads the current tab. It is a per-tab setting for this process; restart returns to mobile mode. No portable schema change is made.
+- More → Site permissions shows the current site and links to Android app permissions. Camera and microphone requests require a website confirmation even when Android app permission was already granted. A short-lived, one-use handshake joins Gecko's Android/media permission stages to avoid duplicate confirmations for the same request.
+- Only the selected foreground HTTPS page's own origin may request camera, microphone or location. Screen/audio capture, third-party-frame device requests, background tabs, extension pages and unrelated permissions remain unsupported. Media choices are restricted to the camera/microphone sources supplied by Gecko.
+- Android runtime permissions are requested only after website confirmation. Approximate location is accepted. The native result is checked against the same tab, full URL and document revision; cancel, navigation, switching tabs and actual Activity stop reject outstanding requests. A system permission dialog may pause the Activity; its result is held until resume and revalidated. Returning a stale result cannot authorize a newer document.
+- Gecko saves location allow/deny decisions per origin in its private profile. Site permissions can reset this choice and reload the current page to stop that page's streams/location requests; a confirmation warns about unsaved forms. Other tabs and Android app permissions are not reset. Camera/microphone use appears in the expanded address bar; website controls or closing/reloading its tab stop active capture. No background capture service is added.
+
+Phone acceptance:
+
+1. Choose Rocks in Settings → Default browser. Open web links from a message app with Rocks closed and already running. Confirm restored tabs survive and a link opens once; cancel the system chooser and verify it does not report success.
+2. Find a repeated word on a long page, step forward/backward and wrap, change/clear the query, close with Android Back, then switch tabs and navigate while a search is pending.
+3. Toggle Desktop site on a responsive test page; verify a desktop user agent and wide layout, then switch back. Verify other tabs stay unchanged.
+4. On a trusted HTTPS media/geolocation test site, approve/deny website prompts and Android prompts, including approximate location. Repeat while Android already grants the app permission. Check capture indicators, stop with website controls or reload, reset site location, then retry.
+5. Navigate/reload the same URL, switch tabs, background or rotate the Activity while an Android permission dialog is outstanding. Confirm an old result cannot grant access to a replacement page. System permissions and device APIs still need real-device acceptance.
 
 ## 0.3 immersive controls
 
@@ -29,7 +48,7 @@ Automated scroll-state tests cover collapse/reveal, jitter, programmatic movemen
 - Link long-press: foreground/background tab, copy and share.
 - Downloads save the original Gecko response stream, retaining the authenticated response. Confirm and select a destination with Android's document picker; progress and cancellation are shown in Downloads. Keep the app running: process death stops a transfer and cancellation/failure may leave an incomplete destination file. The task list is session-only. HTTP(S) response downloads are supported; arbitrary blob downloads and external-app handoff are not implemented.
 - Website file uploads use the system document picker, including multiple files. Selection is bound to the originating tab and URL; canceled/stale prompts receive no file. Folder/camera capture uploads are not provided.
-- Website alert/confirm prompts identify the source host and are denied/dismissed on backgrounding, tab changes or page navigation. Hardware permissions remain denied.
+- Website alert/confirm prompts identify the source host and are denied/dismissed on backgrounding, tab changes or page navigation. Device permissions follow the 0.4 flow above.
 - Extensions: explicit installation permissions, real toolbar panels, per-tab action overrides, options tabs, enable/disable/uninstall and manual update checks. New update permissions require foreground confirmation; background changes never silently approve permissions. Bundled Rocks Paper needs no network download; Dark Reader and uBlock Origin install from Mozilla. No arbitrary XPI installer or complete add-on store is claimed. Extensions/settings persist in Gecko's private profile.
 
 No password vault, account sync, private browsing, arbitrary app intents, native JS bridges, certificate exceptions or telemetry SDK is added. Browser data and Gecko profile are excluded from Android backup/device transfer. This is a development preview: automated checks do not replace real-device acceptance.

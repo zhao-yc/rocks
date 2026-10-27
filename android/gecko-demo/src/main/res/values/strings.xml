@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">Rocks · Gecko</string>
-    <string name="demo_badge">0.3 预览版</string>
     <string name="home">起始页</string>
     <string name="back">后退</string>
     <string name="forward">前进</string>
@@ -26,7 +25,7 @@
     <string name="try_pages">常用网站</string>
     <string name="example_page">简洁测试页 · Example.org</string>
     <string name="baidu_page">百度</string>
-    <string name="demo_limits">已支持标签网址恢复、书签、历史、下载、文件上传和扩展。重启后不恢复表单、滚动位置或前后退栈；暂不提供密码管理、网站硬件授权和无痕模式。</string>
+    <string name="demo_limits">已支持标签网址恢复、书签、历史、下载、文件上传和扩展。重启后不恢复表单、滚动位置或前后退栈；新增默认浏览器、页面内查找、桌面版与网站设备授权；暂不提供密码管理和无痕模式。</string>
     <string name="extensions_intro">安装扩展后，在网页打开面板即可使用。支持启停、卸载和检查更新；更新新增权限仍需确认。</string>
     <string name="paper_description">Rocks 自制阅读扩展。调整网页纸张背景和文字间距，无需网络下载。</string>
     <string name="dark_description">将网页转换为深色阅读样式。安装后打开面板，可按网站开关深色模式。</string>
@@ -50,7 +49,7 @@
     <string name="install_failed">安装未完成（代码 %1$s）。可能是已取消、网络不可达或扩展验证未通过。可重试或先体验 Rocks Paper。</string>
     <string name="extensions_failed">无法读取或更改扩展，请重试。</string>
     <string name="extension_not_ready">扩展面板尚未就绪，请稍后再试。</string>
-    <string name="site_permission_denied">此 Demo 暂未提供这项网站授权。</string>
+    <string name="site_permission_denied">此网页暂不支持这项网站授权。</string>
     <string name="unsupported_link">此 Demo 仅打开网页，不会自动唤起其他 App。</string>
     <string name="tab_limit">最多打开 24 个标签，请先关闭一个。</string>
     <string name="page_error">网页未能安全加载。请检查网络，或换一个网址。</string>
@@ -71,7 +70,7 @@
     <string name="clear_history_note">只清除 Rocks 的网址历史列表，不会清除 Cookie、网站存储、已打开标签或下载文件。</string>
     <string name="close_others">关闭其他</string>
     <string name="persistence_note">自动保存标签网址、当前选择、书签和历史。表单、滚动位置及前后退栈仅在本次运行期间保留。</string>
-    <string name="version_text">Rocks 0.3.0 · GeckoView 158</string>
+    <string name="version_text">Rocks 0.4.0 · GeckoView 158</string>
     <string name="restore_failed">本地数据无法读取，原文件已保留。本次操作暂不保存。</string>
     <string name="save_failed">本地保存失败，后续操作会重试。</string>
     <string name="check_update">检查更新</string>
@@ -97,4 +96,34 @@
     <string name="edit_address">编辑网址</string>
     <string name="toolbar_compact">浏览器操作栏已收起</string>
     <string name="toolbar_expanded">浏览器操作栏已展开</string>
+    <string name="default_browser">默认浏览器</string>
+    <string name="default_browser_active">Rocks 已是默认浏览器。</string>
+    <string name="default_browser_note">设为默认后，可用 Rocks 打开其他应用中的网页链接。</string>
+    <string name="default_browser_settings">管理默认应用</string>
+    <string name="set_default_browser">设为默认浏览器</string>
+    <string name="system_settings_unavailable">无法打开系统设置，请在手机设置中手动调整。</string>
+    <string name="find_in_page">页面内查找</string>
+    <string name="find_hint">输入要查找的文字</string>
+    <string name="find_searching">正在查找…</string>
+    <string name="find_count_unknown">第 %1$d 处匹配</string>
+    <string name="find_count">%1$d / %2$d 处匹配</string>
+    <string name="find_previous">上一个匹配</string>
+    <string name="find_next">下一个匹配</string>
+    <string name="find_close">关闭页面内查找</string>
+    <string name="desktop_site">桌面版网站</string>
+    <string name="site_permissions">网站权限</string>
+    <string name="camera">相机</string>
+    <string name="microphone">麦克风</string>
+    <string name="location">定位</string>
+    <string name="site_permission_title">允许 %1$s 使用设备功能？</string>
+    <string name="site_permission_body">网站请求：%1$s。确认后，若 Android 尚未授权，会继续显示系统权限请求。不会据此自动授权其他网站。</string>
+    <string name="location_permission_note">定位选择由浏览内核按网站保存，可在“更多 → 网站权限”中重置。系统只授予近似位置时，Rocks 会尊重该选择。</string>
+    <string name="site_permissions_note">相机、麦克风每次请求均需网站确认。定位选择由内核按网站保存；重置后下次可重新选择。仅支持当前 HTTPS 网页自身的设备请求。Android 应用权限是独立的总开关，重置网站不会撤销它。</string>
+    <string name="recording_active">网页正在使用相机或麦克风</string>
+    <string name="reset_site_permissions">重置本站定位并重新加载</string>
+    <string name="reset_site_permissions_note">将重置当前网站的定位选择并重新加载本页，停止本页的相机、麦克风和定位请求。未提交的表单可能丢失；其他标签不会重新加载。Android 应用权限保持原样。</string>
+    <string name="site_permissions_reset">本站定位已重置，本页已重新加载</string>
+    <string name="site_permission_failed">无法重置网站权限，请重试。</string>
+    <string name="android_app_permissions">管理 Android 应用权限</string>
+    <string name="desktop_note">桌面版只作用于当前标签并会重新加载；重启后恢复为移动版。</string>
 </resources>

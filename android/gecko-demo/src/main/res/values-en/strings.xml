@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">Rocks · Gecko</string>
-    <string name="demo_badge">0.3 preview</string>
     <string name="home">Start page</string>
     <string name="back">Back</string>
     <string name="forward">Forward</string>
@@ -26,7 +25,7 @@
     <string name="try_pages">Quick links</string>
     <string name="example_page">Simple test page · Example.org</string>
     <string name="baidu_page">Baidu</string>
-    <string name="demo_limits">Tabs, bookmarks, history, downloads, uploads and extensions are available. Restart restores tab URLs, not forms, scroll positions or navigation stacks. Password management, website hardware permissions and private browsing are not included.</string>
+    <string name="demo_limits">Tabs, bookmarks, history, downloads, uploads and extensions are available. Restart restores tab URLs, not forms, scroll positions or navigation stacks. Default browser integration, find in page, desktop mode and website device permissions are included. Password management and private browsing are not included.</string>
     <string name="extensions_intro">Install extensions and open their panels on websites. Enable, disable, uninstall and check for updates; new permissions require confirmation.</string>
     <string name="paper_description">A Rocks reading extension. Change page background and text spacing without a network download.</string>
     <string name="dark_description">Apply dark reading styles to websites. Use its panel to enable or disable dark mode for each site.</string>
@@ -50,7 +49,7 @@
     <string name="install_failed">Installation did not finish (code %1$s). It may have been canceled, the network may be unavailable, or verification failed. Retry or try Rocks Paper.</string>
     <string name="extensions_failed">Unable to read or change extensions. Please retry.</string>
     <string name="extension_not_ready">The extension panel is not ready yet. Please retry shortly.</string>
-    <string name="site_permission_denied">This demo does not provide that website permission yet.</string>
+    <string name="site_permission_denied">This website permission is not available for this page.</string>
     <string name="unsupported_link">This demo opens web pages and does not launch other apps automatically.</string>
     <string name="tab_limit">Up to 24 tabs are supported. Close a tab first.</string>
     <string name="page_error">The page could not be loaded safely. Check the network or try another address.</string>
@@ -71,7 +70,7 @@
     <string name="clear_history_note">Clear the Rocks URL history list only. Cookies, website storage, open tabs and downloaded files remain.</string>
     <string name="close_others">Close others</string>
     <string name="persistence_note">Tab URLs, selection, bookmarks and history are saved automatically. Forms, scroll positions and navigation stacks are kept only during this process.</string>
-    <string name="version_text">Rocks 0.3.0 · GeckoView 158</string>
+    <string name="version_text">Rocks 0.4.0 · GeckoView 158</string>
     <string name="restore_failed">Local data could not be restored. The original file is protected; changes stay in memory.</string>
     <string name="save_failed">Local save failed. Later changes will retry.</string>
     <string name="check_update">Check for updates</string>
@@ -97,4 +96,34 @@
     <string name="edit_address">Edit address</string>
     <string name="toolbar_compact">Browser controls collapsed</string>
     <string name="toolbar_expanded">Browser controls expanded</string>
+    <string name="default_browser">Default browser</string>
+    <string name="default_browser_active">Rocks is your default browser.</string>
+    <string name="default_browser_note">Use Rocks to open web links from other apps.</string>
+    <string name="default_browser_settings">Manage default apps</string>
+    <string name="set_default_browser">Set as default browser</string>
+    <string name="system_settings_unavailable">Unable to open system settings. Please change it in Android Settings.</string>
+    <string name="find_in_page">Find in page</string>
+    <string name="find_hint">Enter text to find</string>
+    <string name="find_searching">Finding…</string>
+    <string name="find_count_unknown">Match %1$d</string>
+    <string name="find_count">%1$d / %2$d matches</string>
+    <string name="find_previous">Previous match</string>
+    <string name="find_next">Next match</string>
+    <string name="find_close">Close find in page</string>
+    <string name="desktop_site">Desktop site</string>
+    <string name="site_permissions">Site permissions</string>
+    <string name="camera">Camera</string>
+    <string name="microphone">Microphone</string>
+    <string name="location">Location</string>
+    <string name="site_permission_title">Allow %1$s to use device features?</string>
+    <string name="site_permission_body">Requested: %1$s. After confirmation, Android may ask for app permissions. This does not authorize other websites.</string>
+    <string name="location_permission_note">The engine saves location decisions per website. Reset them in More → Site permissions. Approximate location is respected when selected in Android.</string>
+    <string name="site_permissions_note">Camera and microphone require confirmation for each request. The engine saves location decisions per site; reset to choose again. Device requests are limited to the current HTTPS origin. Android app permissions are separate and are not revoked by resetting a website.</string>
+    <string name="recording_active">This page is using the camera or microphone</string>
+    <string name="reset_site_permissions">Reset site location and reload</string>
+    <string name="reset_site_permissions_note">Reset location decisions for this site and reload this page to stop its camera, microphone and location requests. Unsaved form data may be lost. Other tabs are not reloaded. Android app permissions stay unchanged.</string>
+    <string name="site_permissions_reset">Site location reset; page reloaded</string>
+    <string name="site_permission_failed">Unable to reset site permissions. Please retry.</string>
+    <string name="android_app_permissions">Manage Android app permissions</string>
+    <string name="desktop_note">Desktop mode applies to this tab and reloads it. Restart returns to mobile mode.</string>
 </resources>

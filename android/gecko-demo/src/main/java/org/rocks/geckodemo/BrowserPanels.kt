@@ -1,5 +1,7 @@
 package org.rocks.geckodemo
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,7 +39,9 @@ internal fun LibraryPanel(model: BrowserModel, initial: LibraryPage, dismiss: ()
             }
         }
         if (page == LibraryPage.SETTINGS) {
-            Column(Modifier.padding(20.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp)) {
+                DefaultBrowserSetting()
+                Spacer(Modifier.height(16.dp))
                 Text(stringResource(R.string.search_engine), style = MaterialTheme.typography.titleMedium)
                 SearchEngine.entries.forEach { engine ->
                     Row(Modifier.fillMaxWidth().clickable { model.setSearch(engine) }, verticalAlignment = Alignment.CenterVertically) {
@@ -45,6 +49,7 @@ internal fun LibraryPanel(model: BrowserModel, initial: LibraryPage, dismiss: ()
                         Text(engine.label)
                     }
                 }
+                Text(stringResource(R.string.desktop_note), Modifier.padding(bottom = 12.dp), style = MaterialTheme.typography.bodySmall)
                 Text(stringResource(R.string.persistence_note), style = MaterialTheme.typography.bodySmall)
                 Text(stringResource(R.string.version_text), Modifier.padding(top = 16.dp), style = MaterialTheme.typography.labelMedium)
             }
