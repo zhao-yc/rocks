@@ -117,9 +117,9 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         if (restoring || disposed || !foreground || tab.extensionBase != null) return null
         return BrowserPageScope(tab.id, tab.documentRevision, tab.url)
     }
-    val finder = BrowserFind(viewModelScope) {
+    val finder = BrowserFind(viewModelScope, page = {
         tabs.firstOrNull { it.id == selectedId }?.let { tab -> pageScope(tab.session)?.let { GeckoFindPage(it, tab.session) } }
-    }
+    })
     val sitePermissions = SitePermissions(application, runtime, ::pageScope) { title, body, shown, answer ->
         if (!foreground || disposed || question != null) false
         else { question = PermissionQuestion(title, body, answer).also { it.onShown = shown }; true }
