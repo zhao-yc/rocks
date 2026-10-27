@@ -11,6 +11,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.core.spring
@@ -57,7 +58,9 @@ class MainActivity : ComponentActivity() {
     private val browser: BrowserModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT))
+        window.isStatusBarContrastEnforced = false
+        lifecycle.addObserver(ImmersiveStatusBar(window))
         if (savedInstanceState == null) handleWebIntent(intent)
         setContent {
             MaterialTheme(colorScheme = lightColorScheme(
@@ -238,7 +241,7 @@ private fun BrowserScreen(model: BrowserModel) {
     Surface(modifier = Modifier.fillMaxSize()) {
         // Web content fills this viewport. The toolbar is a sibling overlay, never a layout row.
         Box(Modifier.fillMaxSize().then(if (model.fullScreen) Modifier else
-            Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
+            Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)))
             .imePadding()) {
             HorizontalPager(state = pager, userScrollEnabled = false, beyondViewportPageCount = 1,
                 key = { model.tabs[it].id }, modifier = Modifier.fillMaxSize().onSizeChanged { contentWidth = it.width.toFloat() }) { index ->
@@ -248,7 +251,7 @@ private fun BrowserScreen(model: BrowserModel) {
                         onOpen = { model.navigate(it) }, onExtensions = { showExtensions = true })
                     else GeckoPage(tab.session, Modifier.fillMaxSize(), if (model.fullScreen) 0 else bottomObscured)
                     if (tab.error) {
-                        Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = MaterialTheme.colorScheme.errorContainer) {
+                        Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter).statusBarsPadding(), color = MaterialTheme.colorScheme.errorContainer) {
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text(stringResource(R.string.page_error), Modifier.weight(1f))
                                 TextButton(onClick = { model.reload() }) { Text(stringResource(R.string.retry)) }
@@ -257,7 +260,7 @@ private fun BrowserScreen(model: BrowserModel) {
                     }
                 }
             }
-            Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()) {
+            Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding()) {
                 if (model.storageReadOnly || model.saveFailed) Surface(color = MaterialTheme.colorScheme.errorContainer) {
                     Text(stringResource(if (model.storageReadOnly) R.string.restore_failed else R.string.save_failed),
                         Modifier.padding(10.dp), style = MaterialTheme.typography.bodySmall)
@@ -368,7 +371,7 @@ private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured:
 
 @Composable
 private fun HomeScreen(model: BrowserModel, onOpen: (String) -> Unit, onExtensions: () -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).padding(bottom = 100.dp),
+    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(24.dp).padding(bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.home_eyebrow), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)

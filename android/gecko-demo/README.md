@@ -1,6 +1,16 @@
 # Rocks Gecko development preview
 
-The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.1-gecko (code 5) can update the 0.1/0.2/0.3 demo without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
+The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.2-gecko (code 6) can update the 0.1/0.2/0.3 demo without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
+
+## 0.4.2 edge-to-edge polish
+
+Web content now continues behind the transparent Android status bar; there is no fixed cream-colored top strip. The home page, loading/error notices, dialogs and sheets keep their own safe insets. Horizontal cutout/navigation safety remains, and Gecko continues receiving Android cutout/system insets. System clock, battery and connectivity indicators remain visible outside website fullscreen.
+
+The floating toolbar has zero shadow and tonal elevation in expanded, compact, editing and find states; only its thin outline remains. Its size animation and gesture behavior are unchanged.
+
+Status icon contrast follows a tiny in-memory 24x4 PixelCopy sample of the app surface behind the status bar, at most once every 600 ms with one request in flight. Sampling stops on pause/destroy and is skipped when the status bar is hidden. Samples are recycled immediately, never saved, logged or uploaded. No page script, bridge or additional permission is used.
+
+Phone acceptance: on light and Dark Reader pages, scroll pictures/text under the status bar and check icon visibility. Check portrait/landscape cutouts, the start page, website fullscreen/return, keyboard and both toolbar sizes. Confirm there is no toolbar shadow or rectangular shaded background. CI cannot validate OEM system rendering.
 
 ## 0.4 everyday browser entry points
 
@@ -25,7 +35,7 @@ Phone acceptance:
 
 ## 0.3 immersive controls
 
-The app title row is removed. Web content fills a stable viewport below the Android status/cutout area and extends behind the floating bottom toolbar. Expanding or shrinking the toolbar does not resize the GeckoView or reserve a blank strip. Gecko receives a measured bottom-occlusion hint to keep bottom-fixed website controls clear of the overlay. Android system indicators remain available; website fullscreen still hides browser/system controls.
+The app title row is removed. Web content fills a stable viewport behind the Android status bar and the floating bottom toolbar, while horizontal cutouts remain protected. Expanding or shrinking the toolbar does not resize the GeckoView or reserve a blank strip. Gecko receives a measured bottom-occlusion hint to keep bottom-fixed website controls clear of the overlay. Android system indicators remain available; website fullscreen still hides browser/system controls.
 
 The toolbar uses Rocks sage/forest colors, a thin green outline and a single rounded surface. Scroll down through actual page content to collapse it into a small domain pill; scroll upward or tap the pill to expand. The first tap expands the pill; tap the expanded address to edit. Tap-sized targets remain at least 48 dp even in the compact state. Back, reload, tabs and More stay in the expanded bar; extensions, forward, bookmarking, share, start page and libraries move into More.
 

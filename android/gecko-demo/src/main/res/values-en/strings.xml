@@ -70,7 +70,7 @@
     <string name="clear_history_note">Clear the Rocks URL history list only. Cookies, website storage, open tabs and downloaded files remain.</string>
     <string name="close_others">Close others</string>
     <string name="persistence_note">Tab URLs, selection, bookmarks and history are saved automatically. Forms, scroll positions and navigation stacks are kept only during this process.</string>
-    <string name="version_text">Rocks 0.4.1 · GeckoView 158</string>
+    <string name="version_text">Rocks 0.4.2 · GeckoView 158</string>
     <string name="restore_failed">Local data could not be restored. The original file is protected; changes stay in memory.</string>
     <string name="save_failed">Local save failed. Later changes will retry.</string>
     <string name="check_update">Check for updates</string>

@@ -67,7 +67,7 @@ internal fun FloatingBrowserToolbar(
             shape = RoundedCornerShape(if (editing) 24.dp else 30.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)),
-            shadowElevation = 9.dp) {
+            tonalElevation = 0.dp, shadowElevation = 0.dp) {
             if (model.finder.visible) {
                 FindInPageControls(model)
             } else if (editing) {
