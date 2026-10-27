@@ -1,3 +1,14 @@
+# CI 固定签名验证（2026-10-27）
+
+- 已配置仓库 Secret `ROCKS_ANDROID_SIGNING`；未将配置或私钥写入公开源码、验证记录或聊天。
+- 重跑 Gecko 0.2 运行时代码 `17db69bb43fec62c74572ddd78b37df37bb68aaf`，CI 第 2 次运行：[构建与签名校验](https://github.com/zhao-yc/rocks/actions/runs/39631410714/attempts/2)，job `121966301433`，全部成功。
+- 私密配置准备阶段验证了 keystore 内证书；APK 编译后再次使用 `apksigner verify --verbose --print-certs`，实际单一签名证书与固定指纹 `61fd4f1cf391cb98b53030f008aa0dd57dae4a91fac1bf3525f8db013065acaf` 一致。签名校验步骤执行成功，没有被跳过。
+- 扩展脚本测试、JVM 测试、lint、APK 编译、签名校验、产物上传及临时密钥清理均通过。本次不是工作区补签，签名由 GitHub Actions 读取仓库 Secret 完成。
+- 本次已签名 APK 的 Actions 产物：`rocks-gecko-demo-apk`，artifact ID `12704198585`，ZIP SHA-256 `ebfc07ddb9525d82c7857a67314e5ac8e7906bc788cee8db94fd262628d7ef97`，保留至 2026-11-03（以 GitHub 实际显示为准）。ZIP 摘要不等同于其中 APK 摘要。
+- 本次仅验证 CI 自动签名，没有发布新版本或替换既有 Release APK。以下 2026-10-21 的手动签名说明为历史记录。
+
+---
+
 # Gecko 0.2 开发预览验证（2026-10-21）
 
 - 运行时代码提交：`17db69bb43fec62c74572ddd78b37df37bb68aaf`，版本 `0.2.0-gecko` / versionCode 2。
