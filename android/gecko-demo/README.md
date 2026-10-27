@@ -4,7 +4,7 @@ The accepted Android browser direction is **GeckoView 158.0.20261021001945**, na
 
 ## 0.4 everyday browser entry points
 
-0.4.1 also retains a completed find result when the Activity is temporarily in the background, while generation/session guards discard results from a different page. This prevents the search strip from staying busy after resuming.
+0.4.1 also retains a completed find result when the Activity is temporarily in the background, while generation/session guards discard results from a different page. Debounced searches paused before dispatch resume on return. Regression tests cover background completion, deferred dispatch, late results and clearing. This prevents the search strip from staying busy after resuming.
 
 - Settings offers Android's default-browser chooser and reads the actual role state again on return. The app never claims the role before Android grants it.
 - A single browser Activity handles HTTP/HTTPS VIEW/BROWSABLE intents on cold and warm starts. External links open in a new tab (or reuse the sole empty start page), after portable data restoration. A bounded queue protects restoration; reaching the tab limit leaves existing pages intact. Extras, search text and non-web schemes are not interpreted as navigation commands.

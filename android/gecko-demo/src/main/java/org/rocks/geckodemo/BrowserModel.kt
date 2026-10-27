@@ -118,7 +118,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         return BrowserPageScope(tab.id, tab.documentRevision, tab.url)
     }
     val finder = BrowserFind(viewModelScope) {
-        tabs.firstOrNull { it.id == selectedId }?.let { tab -> pageScope(tab.session)?.let { it to tab.session } }
+        tabs.firstOrNull { it.id == selectedId }?.let { tab -> pageScope(tab.session)?.let { GeckoFindPage(it, tab.session) } }
     }
     val sitePermissions = SitePermissions(application, runtime, ::pageScope) { title, body, shown, answer ->
         if (!foreground || disposed || question != null) false
@@ -489,7 +489,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
 
     fun setForeground(value: Boolean) {
         foreground = value
-        if (value) sitePermissions.resumed() else sitePermissions.backgrounded()
+        if (value) { sitePermissions.resumed(); finder.resumed() } else sitePermissions.backgrounded()
         if (!value) { answerQuestion(false); closePopup(); files.backgrounded(); linkMenu = null; saveImmediately() }
         updateActiveSessions()
     }
