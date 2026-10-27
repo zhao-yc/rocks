@@ -14,42 +14,34 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -137,9 +129,48 @@ private fun BrowserScreen(model: BrowserModel) {
     var contentWidth by remember { mutableFloatStateOf(1f) }
     var addressWidth by remember { mutableFloatStateOf(1f) }
     var gestureStart by remember { mutableIntStateOf(0) }
-    val dragState = rememberDraggableState { delta ->
-        scope.launch { pager.scrollBy(-delta * contentWidth / addressWidth.coerceAtLeast(1f)) }
+    var draggingTabs by remember { mutableStateOf(false) }
+    var bottomObscured by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val keyboardVisible = WindowInsets.ime.getBottom(density) > 0
+    val touchExploration = rememberTouchExploration()
+    val chromePinned = editing || keyboardVisible || showExtensions || showTabs || showMenu || library != null ||
+        model.popup != null || model.question != null || model.linkMenu != null || model.files.offer != null ||
+        current.url == DemoPolicy.HOME || touchExploration || density.fontScale > 1.3f
+    val compact = model.toolbarCollapsed && !chromePinned
+    SideEffect { model.setToolbarInteraction(chromePinned, draggingTabs) }
+    DisposableEffect(model) { onDispose { model.setToolbarInteraction(false, false) } }
+    fun finishEditing() {
+        editing = false
+        focusManager.clearFocus()
+        keyboard?.hide()
+        current.session.setFocused(true)
     }
+    val dragState = rememberDraggableState { delta ->
+        // Dispatch synchronously so a queue of per-frame coroutines cannot outlive the gesture.
+        // One gesture exposes at most one adjacent page, including on a very long drag.
+        val position = pager.currentPage + pager.currentPageOffsetFraction
+        val start = gestureStart.coerceIn(0, model.tabs.lastIndex.coerceAtLeast(0))
+        val target = (position - delta / addressWidth.coerceAtLeast(1f))
+            .coerceIn((start - 1).coerceAtLeast(0).toFloat(),
+                (start + 1).coerceAtMost(model.tabs.lastIndex).toFloat())
+        pager.dispatchRawDelta((target - position) * contentWidth)
+    }
+    val addressGesture = Modifier.onSizeChanged { addressWidth = it.width.toFloat() }
+        .draggable(dragState, Orientation.Horizontal, enabled = model.tabs.size > 1 && !editing,
+            onDragStarted = { gestureStart = pager.settledPage; draggingTabs = true },
+            onDragStopped = { velocity ->
+                val offset = pager.currentPage + pager.currentPageOffsetFraction - gestureStart
+                val target = DemoPolicy.swipeTarget(gestureStart, offset, velocity, model.tabs.size)
+                scope.launch {
+                    try {
+                        pager.animateScrollToPage(target, animationSpec = spring(stiffness = 380f))
+                        model.tabs.getOrNull(target)?.let { model.selectTab(it.id) }
+                    } finally { draggingTabs = false }
+                }
+            })
 
     LaunchedEffect(model.selectedId, model.tabs.size) {
         val index = model.tabs.indexOfFirst { it.id == model.selectedId }
@@ -151,7 +182,11 @@ private fun BrowserScreen(model: BrowserModel) {
             if (model.notice == message) model.notice = null
         }
     }
-    LaunchedEffect(editing) { if (editing) focusRequester.requestFocus() }
+    LaunchedEffect(editing) { if (editing) { focusRequester.requestFocus(); keyboard?.show() } }
+    LaunchedEffect(model.selectedId) {
+        if (editing) finishEditing()
+        model.expandToolbar()
+    }
     LaunchedEffect(model.fullScreen) {
         val window = (context as ComponentActivity).window
         val controller = WindowCompat.getInsetsController(window, window.decorView)
@@ -161,116 +196,67 @@ private fun BrowserScreen(model: BrowserModel) {
     BackHandler(enabled = model.popup != null || editing || model.fullScreen || current.canGoBack) {
         when {
             model.popup != null -> model.closePopup()
-            editing -> editing = false
+            editing -> finishEditing()
             else -> model.back()
         }
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().then(if (model.fullScreen) Modifier else Modifier.systemBarsPadding()).imePadding()) {
-            if (!model.fullScreen) {
-                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Rocks", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(stringResource(R.string.demo_badge), Modifier.padding(start = 8.dp),
-                        color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-                    Spacer(Modifier.weight(1f))
-                    ToolIcon(if (model.bookmarks.any { it.url == current.url }) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
-                        R.string.bookmark_current, model::toggleBookmark, DemoPolicy.isWebUrl(current.url))
-                    ToolIcon(Icons.Outlined.Extension, R.string.extensions, { showExtensions = true })
-                    Box {
-                        ToolIcon(Icons.Outlined.MoreVert, R.string.more, { showMenu = true })
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            LibraryPage.entries.forEach { page ->
-                                DropdownMenuItem(text = { Text(stringResource(page.label)) }, onClick = { showMenu = false; library = page })
+        // Web content fills this viewport. The toolbar is a sibling overlay, never a layout row.
+        Box(Modifier.fillMaxSize().then(if (model.fullScreen) Modifier else
+            Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
+            .imePadding()) {
+            HorizontalPager(state = pager, userScrollEnabled = false, beyondViewportPageCount = 1,
+                key = { model.tabs[it].id }, modifier = Modifier.fillMaxSize().onSizeChanged { contentWidth = it.width.toFloat() }) { index ->
+                val tab = model.tabs.getOrNull(index)
+                if (tab != null) {
+                    if (tab.url == DemoPolicy.HOME) HomeScreen(model,
+                        onOpen = { model.navigate(it) }, onExtensions = { showExtensions = true })
+                    else GeckoPage(tab.session, Modifier.fillMaxSize(), if (model.fullScreen) 0 else bottomObscured)
+                    if (tab.error) {
+                        Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = MaterialTheme.colorScheme.errorContainer) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(stringResource(R.string.page_error), Modifier.weight(1f))
+                                TextButton(onClick = { model.reload() }) { Text(stringResource(R.string.retry)) }
                             }
                         }
                     }
                 }
             }
-            if (model.storageReadOnly || model.saveFailed) Surface(color = MaterialTheme.colorScheme.errorContainer) {
-                Text(stringResource(if (model.storageReadOnly) R.string.restore_failed else R.string.save_failed), Modifier.padding(10.dp), style = MaterialTheme.typography.bodySmall)
-            }
-            Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged { contentWidth = it.width.toFloat() }) {
-                HorizontalPager(state = pager, userScrollEnabled = false, beyondViewportPageCount = 1,
-                    key = { model.tabs[it].id }, modifier = Modifier.fillMaxSize()) { index ->
-                    val tab = model.tabs.getOrNull(index)
-                    if (tab != null) {
-                        if (tab.url == DemoPolicy.HOME) HomeScreen(model,
-                            onOpen = { model.navigate(it) },
-                            onExtensions = { showExtensions = true },
-                        ) else GeckoPage(tab.session, Modifier.fillMaxSize())
-                        if (tab.error) {
-                            Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = MaterialTheme.colorScheme.errorContainer) {
-                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(stringResource(R.string.page_error), Modifier.weight(1f))
-                                    TextButton(onClick = { model.reload() }) { Text(stringResource(R.string.retry)) }
-                                }
-                            }
-                        }
-                    }
+            Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()) {
+                if (model.storageReadOnly || model.saveFailed) Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                    Text(stringResource(if (model.storageReadOnly) R.string.restore_failed else R.string.save_failed),
+                        Modifier.padding(10.dp), style = MaterialTheme.typography.bodySmall)
                 }
                 if (current.progress < 100 && current.url != DemoPolicy.HOME) {
                     LinearProgressIndicator(progress = { current.progress / 100f }, modifier = Modifier.fillMaxWidth())
                 }
-                SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
             }
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = with(density) { bottomObscured.toDp() }))
             if (!model.fullScreen) {
-                Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 2.dp) {
-                    Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                        if (editing) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedTextField(value = address, onValueChange = { address = it }, singleLine = true,
-                                    placeholder = { Text(stringResource(R.string.address_hint)) },
-                                    modifier = Modifier.weight(1f).focusRequester(focusRequester),
-                                    shape = RoundedCornerShape(20.dp),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-                                    keyboardActions = KeyboardActions(onGo = { if (model.navigate(address.text)) editing = false }))
-                                TextButton(onClick = { editing = false }) { Text(stringResource(R.string.cancel)) }
-                            }
-                        } else {
-                            Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface,
-                                modifier = Modifier.fillMaxWidth().height(50.dp)
-                                    .onSizeChanged { addressWidth = it.width.toFloat() }
-                                    .draggable(dragState, Orientation.Horizontal,
-                                        onDragStarted = { gestureStart = pager.settledPage },
-                                        onDragStopped = { velocity ->
-                                            val offset = pager.currentPage + pager.currentPageOffsetFraction - gestureStart
-                                            val target = DemoPolicy.swipeTarget(gestureStart, offset, velocity, model.tabs.size)
-                                            scope.launch {
-                                                pager.animateScrollToPage(target, animationSpec = spring(stiffness = 380f))
-                                                model.tabs.getOrNull(target)?.let { model.selectTab(it.id) }
-                                            }
-                                        })
-                                    .clickable {
-                                        address = TextFieldValue(if (current.url == DemoPolicy.HOME) "" else current.url,
-                                            selection = TextRange(0, if (current.url == DemoPolicy.HOME) 0 else current.url.length))
-                                        editing = true
-                                    }) {
-                                Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(if (current.url.startsWith("https://")) Icons.Outlined.Lock else Icons.Outlined.Language,
-                                        contentDescription = null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.primary)
-                                    Text(displayAddress(current.url), Modifier.weight(1f).padding(horizontal = 9.dp),
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-                                    Text("${model.tabs.indexOf(current) + 1}/${model.tabs.size}", style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
+                FloatingBrowserToolbar(model, compact, editing, address, { address = it }, focusRequester,
+                    addressGesture,
+                    onAddress = {
+                        if (compact) model.expandToolbar()
+                        else {
+                            val value = if (current.url == DemoPolicy.HOME) "" else current.url
+                            address = TextFieldValue(value, selection = TextRange(0, value.length))
+                            editing = true
                         }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            ToolIcon(Icons.AutoMirrored.Outlined.ArrowBack, R.string.back, { model.back() }, current.canGoBack)
-                            ToolIcon(Icons.AutoMirrored.Outlined.ArrowForward, R.string.forward, { current.session.goForward() }, current.canGoForward)
-                            ToolIcon(Icons.Outlined.Refresh, R.string.reload, { model.reload() }, current.url != DemoPolicy.HOME)
-                            ToolIcon(Icons.Outlined.Home, R.string.home, { model.home() })
-                            ToolIcon(Icons.Outlined.Share, R.string.share, {
-                                context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"; putExtra(Intent.EXTRA_TEXT, current.url)
-                                }, shareLabel))
-                            }, DemoPolicy.isWebUrl(current.url))
-                            BadgedBox(badge = { Badge { Text(model.tabs.size.toString()) } }) {
-                                ToolIcon(Icons.Outlined.Tab, R.string.tabs, { showTabs = true })
-                            }
-                        }
-                    }
-                }
+                    },
+                    onSubmit = { if (model.navigate(address.text)) finishEditing() }, onCancel = ::finishEditing,
+                    onTabs = { showTabs = true }, onMenu = { showMenu = true },
+                    menuExpanded = showMenu, onDismissMenu = { showMenu = false },
+                    onExtensions = { showMenu = false; showExtensions = true },
+                    onLibrary = { showMenu = false; library = it },
+                    onShare = {
+                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"; putExtra(Intent.EXTRA_TEXT, current.url)
+                        }, shareLabel))
+                    },
+                    modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 600.dp).fillMaxWidth()
+                        .onSizeChanged { bottomObscured = it.height }
+                        .navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp))
             }
         }
     }
@@ -326,20 +312,24 @@ private fun BrowserScreen(model: BrowserModel) {
 }
 
 @Composable
-private fun GeckoPage(session: GeckoSession, modifier: Modifier) {
+private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured: Int = 0) {
     key(session) {
         AndroidView(factory = { context ->
             GeckoView(context).apply {
                 setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
                 setSession(session)
             }
-        }, modifier = modifier, onReset = null, onRelease = { it.releaseSession() })
+        }, modifier = modifier, update = { view ->
+            // Keep bottom-fixed site controls visible without resizing the GeckoView or reserving
+            // a blank toolbar strip. Gecko adjusts compositing for the overlay's measured height.
+            view.setVerticalClipping(bottomObscured)
+        }, onReset = null, onRelease = { it.releaseSession() })
     }
 }
 
 @Composable
 private fun HomeScreen(model: BrowserModel, onOpen: (String) -> Unit, onExtensions: () -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).padding(bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.home_eyebrow), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
@@ -426,7 +416,7 @@ private fun ToolIcon(icon: ImageVector, label: Int, onClick: () -> Unit, enabled
 }
 
 @Composable
-private fun displayAddress(url: String): String = when {
+internal fun displayAddress(url: String): String = when {
     url == DemoPolicy.HOME -> stringResource(R.string.home)
     url.startsWith("moz-extension://") -> stringResource(R.string.extension_page)
     else -> Uri.parse(url).host ?: url

@@ -1,8 +1,25 @@
 # Rocks Gecko development preview
 
-The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.2.0-gecko (code 2) can update the 0.1 demo without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
+The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.3.0-gecko (code 3) can update the 0.1/0.2 demo without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
 
-## 0.2 scope
+## 0.3 immersive controls
+
+The app title row is removed. Web content fills a stable viewport below the Android status/cutout area and extends behind the floating bottom toolbar. Expanding or shrinking the toolbar does not resize the GeckoView or reserve a blank strip. Gecko receives a measured bottom-occlusion hint to keep bottom-fixed website controls clear of the overlay. Android system indicators remain available; website fullscreen still hides browser/system controls.
+
+The toolbar uses Rocks sage/forest colors, a thin green outline and a single rounded surface. Scroll down through actual page content to collapse it into a small domain pill; scroll upward or tap the pill to expand. The first tap expands the pill; tap the expanded address to edit. Tap-sized targets remain at least 48 dp even in the compact state. Back, reload, tabs and More stay in the expanded bar; extensions, forward, bookmarking, share, start page and libraries move into More.
+
+Only Gecko compositor scroll events marked as user interaction drive collapse. Direction hysteresis prevents jitter; script scrolling and zoom do not hide controls. Navigation/tab changes restore the bar. Address editing, the keyboard, sheets/dialogs, the start page, touch exploration and large system text keep it expanded. Horizontal address-bar drags work in both states and do not consume webpage vertical gestures. No native JavaScript bridge is used.
+
+Phone acceptance for this version:
+
+1. Open a long page, scroll down, then up slowly. Confirm smooth pill/bar transitions while page content does not jump. Check both portrait/landscape and Android gesture/three-button navigation.
+2. Tap the pill once to expand, again to edit. Submit/cancel with the keyboard and Android Back. Open a webpage input near the bottom and check it remains reachable.
+3. Swipe the address/pill left and right with multiple tabs. Try short drags, flicks, first/last tabs and the tab grid. Open More and confirm extension panels and all previous actions remain available.
+4. Check script scrolling, pinch zoom, fixed website footers, video fullscreen and return from fullscreen. Enable TalkBack/large text: controls must remain expanded.
+
+Automated scroll-state tests cover collapse/reveal, jitter, programmatic movement, zoom and interaction locks. UI animation, keyboard and Android inset behavior still require device acceptance.
+
+## Existing browser functions
 
 - Bottom address-bar drag with animated adjacent pages, short-drag snap-back, search/edit/cancel, back/forward/reload/share and a full-screen tab card grid. Up to 24 normal tabs; adjacent pages load in advance and other tabs load on selection.
 - Restore tab URLs/titles/selection, bookmarks (200), URL history (500) and chosen search engine. Forms, scroll positions and navigation stacks survive tab switching/configuration changes but are not restored after process death.

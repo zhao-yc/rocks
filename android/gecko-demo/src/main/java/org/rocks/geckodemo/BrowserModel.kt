@@ -72,6 +72,17 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         private set
     var fullScreen by mutableStateOf(false)
         private set
+    var toolbarCollapsed by mutableStateOf(false)
+        private set
+    private val toolbarScroll = ToolbarScrollState()
+    private var toolbarInteractionLocked = false
+
+    fun expandToolbar() { toolbarScroll.expand(); toolbarCollapsed = false }
+    fun setToolbarInteraction(pinned: Boolean, dragging: Boolean) {
+        toolbarInteractionLocked = pinned || dragging
+        if (pinned) expandToolbar()
+    }
+    private fun resetToolbar() { toolbarScroll.reset(); toolbarCollapsed = false }
     private var nextId = 1L
     private var foreground = true
     private var pendingInstall: GeckoResult<WebExtension>? = null
@@ -254,6 +265,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
                 if (url != null) {
                     if (tab.url != url && tab.id == selectedId) { files.cancelPrompts(); answerQuestion(false); linkMenu = null }
+                    if (tab.url != url && tab.id == selectedId) resetToolbar()
                     tab.url = url; save()
                 }
             }
@@ -269,7 +281,10 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             }
         }
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
-            override fun onPageStart(session: GeckoSession, url: String) { tab.error = false; tab.progress = 5 }
+            override fun onPageStart(session: GeckoSession, url: String) {
+                tab.error = false; tab.progress = 5
+                if (tab.id == selectedId) resetToolbar()
+            }
             override fun onProgressChange(session: GeckoSession, progress: Int) { tab.progress = progress }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 tab.progress = 100
@@ -282,11 +297,19 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                 }
             }
         }
+        session.compositorScrollDelegate = object : GeckoSession.CompositorScrollDelegate {
+            override fun onScrollChanged(session: GeckoSession, update: GeckoSession.ScrollPositionUpdate) {
+                if (tab.id != selectedId || !foreground || fullScreen) return
+                toolbarCollapsed = toolbarScroll.onScroll(update.scrollY, update.zoom,
+                    update.source == GeckoSession.ScrollPositionUpdate.SOURCE_USER_INTERACTION,
+                    toolbarInteractionLocked || tab.url == DemoPolicy.HOME)
+            }
+        }
         session.contentDelegate = object : GeckoSession.ContentDelegate {
             override fun onTitleChange(session: GeckoSession, title: String?) { tab.title = title.orEmpty().take(512); save() }
             override fun onCloseRequest(session: GeckoSession) { closeTab(tab.id) }
             override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
-                if (tab.id == selectedId) this@BrowserModel.fullScreen = fullScreen
+                if (tab.id == selectedId) { this@BrowserModel.fullScreen = fullScreen; resetToolbar() }
             }
             override fun onCrash(session: GeckoSession) { tab.error = true; tab.progress = 100 }
             override fun onContextMenu(session: GeckoSession, screenX: Int, screenY: Int, element: GeckoSession.ContentDelegate.ContextElement) {
@@ -352,6 +375,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     fun selectTab(id: Long) {
         if (tabs.none { it.id == id }) return
         if (selectedId != id) {
+            resetToolbar()
             if (fullScreen) tabs.firstOrNull { it.id == selectedId }?.session?.exitFullScreen()
             fullScreen = false
             closePopup()

@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">Rocks · Gecko</string>
-    <string name="demo_badge">0.2 预览版</string>
+    <string name="demo_badge">0.3 预览版</string>
     <string name="home">起始页</string>
     <string name="back">后退</string>
     <string name="forward">前进</string>
@@ -22,7 +22,7 @@
     <string name="home_intro">以 Firefox 引擎为基础，配上 Rocks 的底部手势与扩展体验。</string>
     <string name="try_extensions">体验扩展插件</string>
     <string name="gesture_title">在底部，左右滑动</string>
-    <string name="gesture_body">拖动底部地址栏，让网页跟随手指切换。短滑会回到原页，快速划动可切换相邻标签。</string>
+    <string name="gesture_body">左右拖动悬浮地址栏切换标签，短滑会回到原页。向下浏览时收起为网址胶囊，向上浏览或轻点胶囊展开。</string>
     <string name="try_pages">常用网站</string>
     <string name="example_page">简洁测试页 · Example.org</string>
     <string name="baidu_page">百度</string>
@@ -71,7 +71,7 @@
     <string name="clear_history_note">只清除 Rocks 的网址历史列表，不会清除 Cookie、网站存储、已打开标签或下载文件。</string>
     <string name="close_others">关闭其他</string>
     <string name="persistence_note">自动保存标签网址、当前选择、书签和历史。表单、滚动位置及前后退栈仅在本次运行期间保留。</string>
-    <string name="version_text">Rocks 0.2.0 · GeckoView 158</string>
+    <string name="version_text">Rocks 0.3.0 · GeckoView 158</string>
     <string name="restore_failed">本地数据无法读取，原文件已保留。本次操作暂不保存。</string>
     <string name="save_failed">本地保存失败，后续操作会重试。</string>
     <string name="check_update">检查更新</string>
@@ -93,4 +93,8 @@
     <string name="download_session_note">这里显示本次运行期间的下载任务，文件保存在你选择的位置。</string>
     <string name="website_dialog">来自网站 %1$s 的提示</string>
     <string name="bookmark_limit">最多保存 200 个书签，请先移除一个。</string>
+    <string name="expand_toolbar">展开浏览器操作栏</string>
+    <string name="edit_address">编辑网址</string>
+    <string name="toolbar_compact">浏览器操作栏已收起</string>
+    <string name="toolbar_expanded">浏览器操作栏已展开</string>
 </resources>
