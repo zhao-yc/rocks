@@ -80,7 +80,10 @@ class MainActivity : ComponentActivity() {
         handleWebIntent(intent)
     }
     override fun onStop() {
-        if (!isChangingConfigurations) browser.sitePermissions.cancel()
+        // Some OEM permission controllers stop the host Activity instead of only pausing it.
+        // Keep that one system result pending; it can authorize nothing until resume + scope checks.
+        if (!isChangingConfigurations && browser.sitePermissions.nativeRequest?.launched != true)
+            browser.sitePermissions.cancel()
         super.onStop()
     }
     override fun onResume() { super.onResume(); browser.setForeground(true) }
