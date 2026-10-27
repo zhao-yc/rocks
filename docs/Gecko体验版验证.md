@@ -1,3 +1,16 @@
+# Gecko 0.4.2 状态栏与浮栏修正（2026-10-27）
+
+- 源码提交：`6e6f25d1d8e1c18b53b12c28b09b3adb93c7a7ec`，版本 `0.4.2-gecko` / versionCode 6。沿用包名和固定证书，可覆盖之前 Gecko 体验版。
+- 网页视口移除顶部固定安全区留白，绘制到透明状态栏后方；起始页、错误/加载提示保留各自的状态栏安全位置。系统时间、电量和网络图标保持显示，网站全屏仍隐藏系统栏。
+- 状态栏图标根据应用在状态栏后方实际绘制的亮度调整深浅，使用 24×4 内存采样、600ms 限频和明暗滞回。暂停/销毁时停止采样，隐藏状态栏时跳过；图像只用于本地渲染对比度判断并立即回收，没有保存、日志或上传，也没有增加网页脚本、桥或权限。
+- 悬浮栏原有 9dp 投影归零，tonal/shadow elevation 均为 0，保留细边框、配色、动画和手势；展开、收起、编辑和查找状态共用该无投影表面。
+- [Gecko CI](https://github.com/zhao-yc/rocks/actions/runs/40481647470) 成功：核心 23 项 + 应用/共享数据 36 项 JVM 测试，共 59 项；2 项扩展脚本测试；lint 0 错误、15 警告、2 提示；APK 编译及实际固定签名校验通过。新增 lint 提示为 Bitmap API 的 KTX 写法建议。
+- [发布运行](https://github.com/zhao-yc/rocks/actions/runs/40482216534) 再次验证源构建、产物摘要、实际签名、包名、版本及引擎后成功发布。签名证书 SHA-256 仍为 `61fd4f1cf391cb98b53030f008aa0dd57dae4a91fac1bf3525f8db013065acaf`，私密配置未公开。
+- 公开下载：<https://github.com/zhao-yc/rocks/releases/download/v0.4.2-gecko/rocks-gecko-0.4.2.apk>，164944255 字节，SHA-256 `b6f3aa9d539a523ba08e153f5e2e7894067c8e173ddc585a44e00490fe8b1915`。Release 已公开，匿名下载已实际取回 ZIP 文件头。
+- 没有执行真机/模拟器视觉验收；透明状态栏、挖孔/横屏、深色网页图标对比度、键盘和底栏投影效果仍需手机确认。步骤见 [工程说明](../android/gecko-demo/README.md)。
+
+---
+
 # Gecko 0.4.1 日常浏览功能验证（2026-10-27）
 
 - 运行时代码：`d40d12820d5ba255cc23cd4a51452571cf967bff`，版本 `0.4.1-gecko` / versionCode 5，包名 `org.rocks.browser.geckodemo`，沿用固定开发证书，可覆盖现有 Gecko 体验版。
