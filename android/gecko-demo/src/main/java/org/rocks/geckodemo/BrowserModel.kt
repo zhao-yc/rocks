@@ -135,7 +135,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     fun toggleDesktop() {
         val tab = current
         if (!DemoPolicy.isWebUrl(tab.url)) return
-        sitePermissions.cancel(); answerQuestion(false); finder.close()
+        sitePermissions.cancel(); answerQuestion(false); finder.close(); tab.documentRevision++
         tab.desktop = !tab.desktop
         tab.session.settings.userAgentMode = if (tab.desktop) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         tab.session.settings.viewportMode = if (tab.desktop) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE
@@ -150,7 +150,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                 sitePermissions.cancel()
                 sitePermissions.resetLocation(expected.url) { success ->
                     if (pageScope(tab.session) == expected) {
-                        if (success) { tab.session.reload(); notify(R.string.site_permissions_reset) }
+                        if (success) { reload(); notify(R.string.site_permissions_reset) }
                         else notify(R.string.site_permission_failed)
                     }
                 }

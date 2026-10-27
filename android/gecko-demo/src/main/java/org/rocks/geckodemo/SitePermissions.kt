@@ -42,7 +42,7 @@ internal class SitePermissions(
         SiteCapability.MICROPHONE -> listOf(Manifest.permission.RECORD_AUDIO)
         SiteCapability.LOCATION -> listOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
     } }.distinct().toTypedArray()
-    private fun capabilities(names: Array<String>): Set<SiteCapability>? {
+    private fun capabilities(names: Array<out String>): Set<SiteCapability>? {
         if (names.isEmpty()) return null
         return names.map { when (it) {
             Manifest.permission.CAMERA -> SiteCapability.CAMERA
