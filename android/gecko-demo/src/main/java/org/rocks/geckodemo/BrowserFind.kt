@@ -49,8 +49,13 @@ internal class BrowserFind(private val scope: CoroutineScope,
         busy = true
         target.second.finder.find(if (again) null else query,
             if (backwards) GeckoSession.FINDER_FIND_BACKWARDS else GeckoSession.FINDER_FIND_FORWARD).accept({ result ->
-            if (visible && expected == generation && page()?.first == target.first) {
-                current = result?.current ?: 0; total = result?.total ?: 0; busy = false
+            if (visible && expected == generation && session === target.second) {
+                // The foreground-only page getter returns null while the Activity is paused.
+                // Keep this same session's completed result rather than leaving the UI busy.
+                // Navigation/tab changes close this operation and advance generation.
+                val currentPage = page()?.first
+                if (currentPage != null && currentPage != target.first) close()
+                else { current = result?.current ?: 0; total = result?.total ?: 0; busy = false }
             }
         }, {
             if (visible && expected == generation) { current = 0; total = 0; busy = false }

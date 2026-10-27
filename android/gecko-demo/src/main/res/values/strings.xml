@@ -70,7 +70,7 @@
     <string name="clear_history_note">只清除 Rocks 的网址历史列表，不会清除 Cookie、网站存储、已打开标签或下载文件。</string>
     <string name="close_others">关闭其他</string>
     <string name="persistence_note">自动保存标签网址、当前选择、书签和历史。表单、滚动位置及前后退栈仅在本次运行期间保留。</string>
-    <string name="version_text">Rocks 0.4.0 · GeckoView 158</string>
+    <string name="version_text">Rocks 0.4.1 · GeckoView 158</string>
     <string name="restore_failed">本地数据无法读取，原文件已保留。本次操作暂不保存。</string>
     <string name="save_failed">本地保存失败，后续操作会重试。</string>
     <string name="check_update">检查更新</string>

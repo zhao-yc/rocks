@@ -1,8 +1,10 @@
 # Rocks Gecko development preview
 
-The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.0-gecko (code 4) can update the 0.1/0.2/0.3 demo without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
+The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.1-gecko (code 5) can update the 0.1/0.2/0.3 demo without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
 
 ## 0.4 everyday browser entry points
+
+0.4.1 also retains a completed find result when the Activity is temporarily in the background, while generation/session guards discard results from a different page. This prevents the search strip from staying busy after resuming.
 
 - Settings offers Android's default-browser chooser and reads the actual role state again on return. The app never claims the role before Android grants it.
 - A single browser Activity handles HTTP/HTTPS VIEW/BROWSABLE intents on cold and warm starts. External links open in a new tab (or reuse the sole empty start page), after portable data restoration. A bounded queue protects restoration; reaching the tab limit leaves existing pages intact. Extras, search text and non-web schemes are not interpreted as navigation commands.
