@@ -1,3 +1,16 @@
+# Gecko 0.3 沉浸式交互验证（2026-10-27）
+
+- 运行时代码提交：`b6fc7b441d9151052bd23648887d80497b85365f`，版本 `0.3.0-gecko` / versionCode 3，沿用 `org.rocks.browser.geckodemo` 包名与现有固定证书，可覆盖安装 0.1/0.2 Gecko 体验版。
+- 本轮移除浏览器标题行，改为不占用页面布局行的底部悬浮栏；向下浏览收起为网址胶囊，向上浏览/轻点胶囊展开。保留 Rocks 配色与轮廓，菜单集中扩展、书签、分享及浏览记录。Android 系统状态栏仍保留。
+- 使用 Gecko CompositorScrollDelegate 的用户滚动来源，结合方向阈值过滤抖动、脚本移动和缩放。编辑、键盘、面板、TalkBack/大字体保持展开；两种状态均保留横向切标签。通过底部遮挡提示放置网站固定控件，不改变 GeckoView 物理尺寸。
+- [Gecko CI](https://github.com/zhao-yc/rocks/actions/runs/40470046352) 全部成功：核心 23 项 + 应用/共享数据 28 项 JVM 测试（包含 4 项新滚动策略测试）、2 项真实扩展脚本逻辑测试、lint、APK 编译和实际签名校验。lint 为 0 错误、13 警告、2 提示；依赖版本/目标 SDK、既有样式建议及两个本轮样式/未用资源提醒未阻止构建。
+- APK 由仓库 Secret 在 CI 中直接签名。证书 SHA-256 为 `61fd4f1cf391cb98b53030f008aa0dd57dae4a91fac1bf3525f8db013065acaf`，与 0.1/0.2 一致；临时私钥清理步骤成功。
+- [发布运行](https://github.com/zhao-yc/rocks/actions/runs/40470395499) 校验源构建和代码提交、固定 Actions artifact ZIP 摘要、APK 实际证书、包名、版本、ZIP、Gecko 引擎和 Paper 扩展后发布，没有使用公共临时中转服务。
+- 公开下载：<https://github.com/zhao-yc/rocks/releases/download/v0.3.0-gecko/rocks-gecko-0.3.0.apk>。Release 为公开预览版；匿名下载已实际取回 ZIP 文件头。APK 为 164806479 字节，SHA-256 `6b45d5d3fe758bd86191365aae02c7341b3ae93caf7a864db49ce5e9c58c859e`，以 GitHub 公开资产元数据和随包摘要文件核对。
+- 新的浮层动画、网页固定底栏、输入法、横屏、系统手势区及 TalkBack 的端到端体验仍待手机验收。本环境未执行真机或模拟器测试。步骤见 [工程说明](../android/gecko-demo/README.md)。
+
+---
+
 # CI 固定签名验证（2026-10-27）
 
 - 已配置仓库 Secret `ROCKS_ANDROID_SIGNING`；未将配置或私钥写入公开源码、验证记录或聊天。
