@@ -15,10 +15,10 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      SOURCE_RUN: '40470046352'
-      SOURCE_SHA: 'b6fc7b441d9151052bd23648887d80497b85365f'
-      SOURCE_ARTIFACT: '12718555621'
-      ZIP_DIGEST: 'b626104d1625e50ea38d1acaa9c7112a11fb7509de7b9fbbfdcc1093a8c5ea7f'
+      SOURCE_RUN: '40474853629'
+      SOURCE_SHA: 'd8d7ab01473c0ec3d4b7513f62a1de9d818e9307'
+      SOURCE_ARTIFACT: '12720655424'
+      ZIP_DIGEST: '3c7ce83adcdf247b3dfab77d9fff621c34a5bf6ac3564a719e08587b1ae86993'
     steps:
       - name: Verify source build and publication ancestry
         run: |
@@ -64,14 +64,14 @@ jobs:
               assert z.testzip() is None
               apks = [name for name in z.namelist() if name.endswith('.apk')]
               assert len(apks) == 1
-              Path('rocks-gecko-0.3.0.apk').write_bytes(z.read(apks[0]))
+              Path('rocks-gecko-0.4.0.apk').write_bytes(z.read(apks[0]))
           PY
       - name: Verify fixed certificate, package and bundled extension
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/rocks-gecko"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs rocks-gecko-0.3.0.apk > certs.txt
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging rocks-gecko-0.3.0.apk > badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs rocks-gecko-0.4.0.apk > certs.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging rocks-gecko-0.4.0.apk > badging.txt
           python3 - <<'PY'
           import json, re, zipfile
           from pathlib import Path
@@ -79,36 +79,36 @@ jobs:
           assert certs == ['61fd4f1cf391cb98b53030f008aa0dd57dae4a91fac1bf3525f8db013065acaf']
           package = Path('badging.txt').read_text().splitlines()[0]
           assert "name='org.rocks.browser.geckodemo'" in package
-          assert "versionCode='3'" in package and "versionName='0.3.0-gecko'" in package
-          with zipfile.ZipFile('rocks-gecko-0.3.0.apk') as z:
+          assert "versionCode='4'" in package and "versionName='0.4.0-gecko'" in package
+          with zipfile.ZipFile('rocks-gecko-0.4.0.apk') as z:
               assert z.testzip() is None
               assert any(n.endswith('/libxul.so') for n in z.namelist())
               assert json.loads(z.read('assets/paper/manifest.json'))['browser_specific_settings']['gecko']['id'] == 'paper@rocks.demo'
               assert not any(n.lower().endswith(('.p12', '.jks', '.keystore')) for n in z.namelist())
           print(package)
           PY
-          sha256sum rocks-gecko-0.3.0.apk > rocks-gecko-0.3.0.apk.sha256
+          sha256sum rocks-gecko-0.4.0.apk > rocks-gecko-0.4.0.apk.sha256
       - name: Publish public preview release
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
-          Rocks Gecko 0.3.0 沉浸式交互预览版，Android 10+ / ARM64。
+          Rocks Gecko 0.4.0 日常浏览功能预览版，Android 10+ / ARM64。
 
-          沿用 Gecko Demo 0.1 / 0.2 的包名及固定签名，可直接覆盖安装，不需要卸载，保留书签、历史和扩展设置。
+          沿用 Gecko 体验版 0.1 / 0.2 / 0.3 的包名和固定签名，可覆盖安装，不需要卸载。
 
-          本轮变化：
-          - 移除浏览器顶部标题栏，网页延伸到悬浮底栏后方，底栏伸缩不改变 GeckoView 尺寸。
-          - 展开为单行悬浮操作栏，向下浏览后收起为网址胶囊；向上浏览或轻点胶囊恢复。
-          - 保持 Rocks 的浅绿/深绿、细边框及圆角风格，借鉴 Safari 的交互方式。
-          - 编辑网址、键盘弹出、打开面板或菜单时保持展开；轻点胶囊先展开，再点网址编辑。
-          - 两种状态都可左右滑动切换标签；单次拖动最多切换相邻标签，短滑回弹，首尾不循环。
-          - 扩展、前进、书签、分享、起始页与浏览记录集中到“更多”；保留下载、上传和标签恢复。
-          - 使用 Gecko 合成器的用户滚动事件，过滤脚本滚动、缩放与方向抖动。TalkBack 和大字体时保持展开。
+          新增功能：
+          - 设置中申请默认浏览器，通过 Android 系统选择器确认；可接收其他应用的 HTTP / HTTPS 链接，支持冷启动及运行中打开。
+          - 页面内查找：输入关键词、高亮匹配、匹配计数、上一个/下一个、关闭清除；导航或切换标签时清理旧结果。
+          - 当前标签的桌面版网站开关，同时切换浏览器标识与页面视口，重新加载生效。
+          - 网站相机、麦克风、定位请求：网站确认后才申请 Android 权限；返回时核对标签、网址和文档版本，拒绝旧页面的授权结果。
+          - 正在采集时显示相机/麦克风提示；“网站权限”可重置本站定位并重新加载当前页，或进入 Android 应用权限。
+          - 保留 0.3 的沉浸式悬浮栏、滚动收起、左右滑动切换标签及 Firefox 扩展。
 
-          51 项 JVM 测试、扩展脚本测试、lint、APK 编译与实际固定签名校验通过。新浮层动画、键盘、网站底部固定元素及横屏仍需真机验收。
-          APK 由 CI 从仓库 Secret 自动签名，发布时再次校验证书、包名、版本和文件摘要；没有公开私钥。
-          源码与验收步骤：https://github.com/zhao-yc/rocks/blob/build/gecko-demo-20261021/android/gecko-demo/README.md
-          源码提交：b6fc7b441d9151052bd23648887d80497b85365f。
+          桌面版仅限当前标签，本次进程内生效；重启恢复移动版。定位选择由 Gecko 按网站保存，重置网站不会撤销 Android 应用权限。新的硬件授权限当前 HTTPS 网页自身来源，不支持跨站 iframe、扩展页或屏幕采集。
+          55 项 JVM 测试、2 项扩展脚本逻辑测试、lint、APK 编译及固定签名校验通过。默认浏览器选择器、外部唤起、真实设备采集与系统权限生命周期仍需手机验收。
+          本次 APK 由 CI 自动签名；发布任务再次核对源构建、产物摘要、实际签名、包名和版本。
+          源码及验收步骤：https://github.com/zhao-yc/rocks/blob/build/gecko-demo-20261021/android/gecko-demo/README.md
+          源码提交：d8d7ab01473c0ec3d4b7513f62a1de9d818e9307。
           NOTES
           cd "$RUNNER_TEMP/rocks-gecko"
-          gh release create v0.3.0-gecko rocks-gecko-0.3.0.apk rocks-gecko-0.3.0.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Rocks Gecko 0.3.0 — Immersive Controls' --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md"
+          gh release create v0.4.0-gecko rocks-gecko-0.4.0.apk rocks-gecko-0.4.0.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Rocks Gecko 0.4.0 — Everyday Browsing' --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md"
