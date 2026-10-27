@@ -18,7 +18,7 @@
 
 正常构建检查应用与测试 APK 的签名；另一个全新 runner 再次构建并核对相同证书。只有通过指纹校验的 APK 才可对外发布。
 
-当前 GitHub 连接读取/写入 Actions Secrets 的权限不足（Secrets API 返回 403）；配置文件已私下准备，但需要所有者手动保存此 Secret。配置完成前，可在持有同一私钥的受控环境中签名 unsigned 中间包并校验固定指纹，不能把临时调试密钥重新用于公开下载。
+2026-10-27，所有者已保存仓库 Secret。Gecko 主线 CI 第 2 次运行已实际读取配置、完成 APK 自动签名并通过固定证书校验：[验证运行](https://github.com/zhao-yc/rocks/actions/runs/39631410714/attempts/2)。签名校验步骤执行成功，非跳过。详细证据见 [Gecko 验证记录](Gecko体验版验证.md)。当前 GitHub 连接仍无 Secrets 管理权限，今后需要更新 Secret 时由所有者操作；缺少或损坏配置不能回退到随机签名。
 
 ## 本地构建
 
