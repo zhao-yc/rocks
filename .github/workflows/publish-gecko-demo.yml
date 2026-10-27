@@ -15,13 +15,16 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      SOURCE_RUN: '39631410714'
-      SOURCE_SHA: '17db69bb43fec62c74572ddd78b37df37bb68aaf'
+      SOURCE_RUN: '40470046352'
+      SOURCE_SHA: 'b6fc7b441d9151052bd23648887d80497b85365f'
+      SOURCE_ARTIFACT: '12718555621'
+      ZIP_DIGEST: 'b626104d1625e50ea38d1acaa9c7112a11fb7509de7b9fbbfdcc1093a8c5ea7f'
     steps:
       - name: Verify source build and publication ancestry
         run: |
           set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/source-run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs" > "$RUNNER_TEMP/source-jobs.json"
           gh api "repos/$GITHUB_REPOSITORY/compare/$SOURCE_SHA...$GITHUB_SHA" > "$RUNNER_TEMP/publish-diff.json"
           python3 - <<'PY'
           import json, os
@@ -29,37 +32,46 @@ jobs:
           root = Path(os.environ['RUNNER_TEMP'])
           run = json.loads((root / 'source-run.json').read_text())
           assert run['head_sha'] == os.environ['SOURCE_SHA'] and run['conclusion'] == 'success'
+          jobs = json.loads((root / 'source-jobs.json').read_text())['jobs']
+          assert any(step['name'] == 'Verify fixed signing when configured' and step['conclusion'] == 'success'
+                     for job in jobs for step in job['steps']), 'CI signing was not verified'
           diff = json.loads((root / 'publish-diff.json').read_text())
           assert diff['status'] in ('ahead', 'identical')
           assert all(f['filename'] == '.github/workflows/publish-gecko-demo.yml' for f in diff['files']), 'Runtime source changed after build'
           PY
-      - name: Retrieve the locally signed APK and verify its digest
+      - name: Retrieve CI-signed APK and verify artifact digest
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/rocks-gecko"
           cd "$RUNNER_TEMP/rocks-gecko"
-          python3 - <<'PYCODE'
-          import re, subprocess, urllib.parse
-          pages = ["https://tmpfiles.org/wPAzM9Mp1ETl/rocks-v2-1.bin", "https://tmpfiles.org/wsAdMuMT1TJh/rocks-v2-2.bin", "https://tmpfiles.org/wGASM3MA1xdu/rocks-v2-3.bin"]
-          for i, page in enumerate(pages, 1):
-              html = subprocess.check_output(['curl', '--fail', '--silent', '--show-error', '--location', '--retry', '2', '--max-time', '30', page], text=True)
-              match = re.search(r'class="download" href="([^"]+)"', html)
-              assert match, 'Transfer page did not provide a download'
-              direct = match.group(1)
-              parsed = urllib.parse.urlparse(direct)
-              assert parsed.scheme == 'https' and parsed.netloc == 'tmpfiles.org'
-              assert re.fullmatch(r'/dl/[A-Za-z0-9/._-]+', parsed.path)
-              subprocess.run(['curl', '--fail', '--location', '--retry', '2', '--max-time', '120', direct, '--output', f'part-{i}.bin'], check=True)
-          PYCODE
-          cat part-1.bin part-2.bin part-3.bin > rocks-gecko-0.2.0.apk
-          echo '77d72c9149562bc8c2b362758fe3e2410d0ede6e80468a77e88800b9906f62fb  rocks-gecko-0.2.0.apk' > rocks-gecko-0.2.0.apk.sha256
-          sha256sum --check --strict rocks-gecko-0.2.0.apk.sha256
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$SOURCE_ARTIFACT" > artifact.json
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          artifact = json.loads(Path('artifact.json').read_text())
+          assert artifact['id'] == int(os.environ['SOURCE_ARTIFACT'])
+          assert artifact['name'] == 'rocks-gecko-demo-apk' and not artifact['expired']
+          assert artifact['workflow_run']['head_sha'] == os.environ['SOURCE_SHA']
+          assert artifact['digest'] == 'sha256:' + os.environ['ZIP_DIGEST']
+          PY
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$SOURCE_ARTIFACT/zip" > source.zip
+          printf '%s  source.zip\n' "$ZIP_DIGEST" > source.zip.sha256
+          sha256sum --check --strict source.zip.sha256
+          python3 - <<'PY'
+          import zipfile
+          from pathlib import Path
+          with zipfile.ZipFile('source.zip') as z:
+              assert z.testzip() is None
+              apks = [name for name in z.namelist() if name.endswith('.apk')]
+              assert len(apks) == 1
+              Path('rocks-gecko-0.3.0.apk').write_bytes(z.read(apks[0]))
+          PY
       - name: Verify fixed certificate, package and bundled extension
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/rocks-gecko"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs rocks-gecko-0.2.0.apk > certs.txt
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging rocks-gecko-0.2.0.apk > badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs rocks-gecko-0.3.0.apk > certs.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging rocks-gecko-0.3.0.apk > badging.txt
           python3 - <<'PY'
           import json, re, zipfile
           from pathlib import Path
@@ -67,36 +79,36 @@ jobs:
           assert certs == ['61fd4f1cf391cb98b53030f008aa0dd57dae4a91fac1bf3525f8db013065acaf']
           package = Path('badging.txt').read_text().splitlines()[0]
           assert "name='org.rocks.browser.geckodemo'" in package
-          assert "versionCode='2'" in package and "versionName='0.2.0-gecko'" in package
-          with zipfile.ZipFile('rocks-gecko-0.2.0.apk') as z:
+          assert "versionCode='3'" in package and "versionName='0.3.0-gecko'" in package
+          with zipfile.ZipFile('rocks-gecko-0.3.0.apk') as z:
               assert z.testzip() is None
               assert any(n.endswith('/libxul.so') for n in z.namelist())
               assert json.loads(z.read('assets/paper/manifest.json'))['browser_specific_settings']['gecko']['id'] == 'paper@rocks.demo'
+              assert not any(n.lower().endswith(('.p12', '.jks', '.keystore')) for n in z.namelist())
           print(package)
           PY
-      - name: Publish public demo release
+          sha256sum rocks-gecko-0.3.0.apk > rocks-gecko-0.3.0.apk.sha256
+      - name: Publish public preview release
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
-          Rocks Gecko 0.2.0 开发预览版，Android 10+ / ARM64。
+          Rocks Gecko 0.3.0 沉浸式交互预览版，Android 10+ / ARM64。
 
-          可直接覆盖安装 Gecko Demo 0.1，沿用包名与固定签名，不需要卸载，保留 Gecko 扩展及其设置。
+          沿用 Gecko Demo 0.1 / 0.2 的包名及固定签名，可直接覆盖安装，不需要卸载，保留书签、历史和扩展设置。
 
-          本轮新增：
-          - 自动恢复标签网址、标题、当前标签、书签、历史及搜索引擎设置，损坏或未来版本数据保留原件。
-          - 全屏卡片标签总览、最多 24 个标签、后台标签按需加载，底部地址栏拖动切换。
-          - 书签、网址历史、搜索引擎设置；链接长按前台/后台打开、复制、分享。
-          - 下载确认及系统保存位置选择，保存原始 Gecko 响应流以保留登录状态；显示进度与取消。
-          - 网站文件上传，通过系统文件选择器授权单文件或最多 20 个文件，页面/标签变化时拒绝过期请求。
-          - 扩展手动检查更新，新增权限需确认；保留 Paper / Dark Reader / uBlock Origin 及真实面板。
+          本轮变化：
+          - 移除浏览器顶部标题栏，网页延伸到悬浮底栏后方，底栏伸缩不改变 GeckoView 尺寸。
+          - 展开为单行悬浮操作栏，向下浏览后收起为网址胶囊；向上浏览或轻点胶囊恢复。
+          - 保持 Rocks 的浅绿/深绿、细边框及圆角风格，借鉴 Safari 的交互方式。
+          - 编辑网址、键盘弹出、打开面板或菜单时保持展开；轻点胶囊先展开，再点网址编辑。
+          - 两种状态都可左右滑动切换标签；单次拖动最多切换相邻标签，短滑回弹，首尾不循环。
+          - 扩展、前进、书签、分享、起始页与浏览记录集中到“更多”；保留下载、上传和标签恢复。
+          - 使用 Gecko 合成器的用户滚动事件，过滤脚本滚动、缩放与方向抖动。TalkBack 和大字体时保持展开。
 
-          下载过程中请保持应用运行；中断或取消可能留下不完整文件，下载任务列表仅限本次运行。
-          重启恢复网址与标题，不恢复表单、滚动位置或前后退栈。暂不提供密码管理、账户同步、网站摄像头/麦克风/定位授权及无痕模式。
-
-          47 项 JVM 测试、2 项扩展脚本逻辑测试、lint（0 错误）、APK 编译通过。尚未执行真机/模拟器端到端验收。
-          固定开发签名证书与 0.1 相同；CI Secret 尚待配置，本次由受控工作区签名，发布时再次校验文件哈希、包名、版本和证书。
-          源码、数据与组件许可：https://github.com/zhao-yc/rocks/blob/build/gecko-demo-20261021/android/gecko-demo/README.md
-          源码提交：17db69bb43fec62c74572ddd78b37df37bb68aaf。
+          51 项 JVM 测试、扩展脚本测试、lint、APK 编译与实际固定签名校验通过。新浮层动画、键盘、网站底部固定元素及横屏仍需真机验收。
+          APK 由 CI 从仓库 Secret 自动签名，发布时再次校验证书、包名、版本和文件摘要；没有公开私钥。
+          源码与验收步骤：https://github.com/zhao-yc/rocks/blob/build/gecko-demo-20261021/android/gecko-demo/README.md
+          源码提交：b6fc7b441d9151052bd23648887d80497b85365f。
           NOTES
           cd "$RUNNER_TEMP/rocks-gecko"
-          gh release create v0.2.0-gecko rocks-gecko-0.2.0.apk rocks-gecko-0.2.0.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Rocks Gecko 0.2.0 Preview' --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md"
+          gh release create v0.3.0-gecko rocks-gecko-0.3.0.apk rocks-gecko-0.3.0.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Rocks Gecko 0.3.0 — Immersive Controls' --prerelease --latest=false --notes-file "$RUNNER_TEMP/release-notes.md"
