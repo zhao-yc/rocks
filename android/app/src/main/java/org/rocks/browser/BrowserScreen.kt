@@ -4,12 +4,13 @@ import android.net.Uri
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -19,12 +20,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -34,36 +32,59 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.rocks.browser.core.*
 
+private enum class BrowserPanel { TABS, BOOKMARKS, HISTORY, SETTINGS }
+
 /** 共享交互约定：网页占满内容区，导航与标签操作集中在拇指可达的底部。 */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel()) {
-    var pendingExternal by remember { mutableStateOf<Uri?>(null) }
+    var pendingExternal by remember { mutableStateOf<LinkTarget?>(null) }
     var pendingDownload by remember { mutableStateOf<DownloadRequest?>(null) }
+    var pendingLink by remember { mutableStateOf<LinkTarget?>(null) }
     val engine = remember(activity, model) { BrowserEngine(activity, model,
-        external = { pendingExternal = it }, requestDownload = { pendingDownload = it }) }
-    var panel by rememberSaveable { mutableStateOf<String?>(null) }
+        external = { pendingExternal = it }, requestDownload = { pendingDownload = it }, requestLinkActions = { pendingLink = it }) }
+    var panel by rememberSaveable { mutableStateOf<BrowserPanel?>(null) }
     var menu by remember { mutableStateOf(false) }
-    var address by rememberSaveable { mutableStateOf("") }
-    var focused by remember { mutableStateOf(false) }
+    var editing by rememberSaveable { mutableStateOf(false) }
+    var editingTabId by rememberSaveable { mutableStateOf<String?>(null) }
+    var tabMenu by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val data = model.data
     val active = data.activeTab
     val status = engine.statuses[active.id] ?: PageStatus()
+    val snackbarHost = remember { SnackbarHostState() }
 
-    LaunchedEffect(active.id, active.url, focused) { if (!focused) address = active.url }
+    LaunchedEffect(model.hint) {
+        model.hint?.let { message ->
+            snackbarHost.showSnackbar(message)
+            model.clearHint(message)
+        }
+    }
+
+    fun dismissAddress() { editing = false; focusManager.clearFocus() }
+    fun openPanel(value: BrowserPanel) { dismissAddress(); menu = false; tabMenu = false; panel = value }
+    fun newTab() {
+        if (data.tabs.size >= MAX_TABS) model.showNotice(activity.getString(R.string.tab_limit, MAX_TABS))
+        else { dismissAddress(); model.change { it.openTab() }; panel = null }
+        menu = false; tabMenu = false
+    }
+    LaunchedEffect(active.id, model.ready) {
+        if (model.ready && editing && editingTabId != active.id) dismissAddress()
+        if (pendingLink?.tabId != active.id) pendingLink = null
+        if (pendingExternal?.tabId != active.id) pendingExternal = null
+    }
     DisposableEffect(engine, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) engine.setResumed(true)
-            if (event == Lifecycle.Event.ON_PAUSE) engine.setResumed(false)
+            if (event == Lifecycle.Event.ON_PAUSE) { pendingExternal = null; engine.setResumed(false) }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer); engine.destroy() }
     }
     SideEffect { engine.prune(data.tabs); engine.syncActive() }
-    BackHandler(enabled = engine.fullScreen != null || panel != null || status.back) {
-        when { engine.fullScreen != null -> engine.exitFullScreen(); panel != null -> panel = null
+    BackHandler(enabled = engine.fullScreen != null || editing || panel != null || status.back) {
+        when { engine.fullScreen != null -> engine.exitFullScreen(); editing -> dismissAddress(); panel != null -> panel = null
             else -> engine.back(active.id) }
     }
 
@@ -73,50 +94,62 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHost) },
         bottomBar = {
             Surface(tonalElevation = 4.dp) {
                 Column(Modifier.navigationBarsPadding().imePadding().padding(horizontal = 12.dp)) {
                     if (status.progress < 100 && active.url.isNotEmpty()) {
                         LinearProgressIndicator(progress = { status.progress / 100f }, modifier = Modifier.fillMaxWidth())
                     }
-                    OutlinedTextField(
-                        value = address, onValueChange = { address = it }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp).onFocusChanged { focused = it.isFocused },
-                        placeholder = { Text(activity.getString(R.string.search_hint)) },
-                        leadingIcon = {
-                            Text(if (active.url.startsWith("https://")) "HTTPS" else if (active.url.startsWith("http://")) "HTTP" else "R",
-                                style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp))
-                        },
-                        trailingIcon = {
-                            ToolButton(if (status.progress < 100) Icons.Default.Close else Icons.Default.Refresh,
-                                if (status.progress < 100) activity.getString(R.string.stop_loading) else activity.getString(R.string.reload), active.url.isNotEmpty()) {
-                                if (status.progress < 100) engine.stop(active.id) else engine.reload(active.id)
-                            }
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-                        keyboardActions = KeyboardActions(onGo = { model.navigate(address); focusManager.clearFocus() }),
-                    )
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        ToolButton(Icons.AutoMirrored.Filled.ArrowBack, activity.getString(R.string.back), status.back) { engine.back(active.id) }
-                        ToolButton(Icons.AutoMirrored.Filled.ArrowForward, activity.getString(R.string.forward), status.forward) { engine.forward(active.id) }
-                        ToolButton(Icons.Default.Home, activity.getString(R.string.home)) { engine.home(active.id); model.change { it.updateTab(it.activeTabId, "", activity.getString(R.string.new_tab)) } }
-                        TextButton(modifier = Modifier.testTag("tabs-button"), onClick = { panel = "Tabs" }) { Text(activity.getString(R.string.tab_count, data.tabs.size)) }
-                        Box {
+                    Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) {
+                            BrowserAddressBar(active.id, active.url, status.progress, editing,
+                                onEditingChange = { if (it) { editingTabId = active.id; editing = true } else dismissAddress() },
+                                onNavigate = model::navigate,
+                                onSwitchTab = { next -> dismissAddress(); model.change { it.selectAdjacentTab(next) } },
+                                onReloadOrStop = { if (status.progress < 100) engine.stop(active.id) else engine.reload(active.id) })
+                        }
+                        if (!editing) Box {
                             ToolButton(Icons.Default.MoreHoriz, activity.getString(R.string.more_options)) { menu = true }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                DropdownMenuItem(text = { Text(activity.getString(R.string.new_tab)) }, onClick = {
-                                    menu = false
-                                    if (data.tabs.size >= MAX_TABS) model.showNotice(activity.getString(R.string.tab_limit, MAX_TABS))
-                                    else model.change { it.openTab() }
-                                }, leadingIcon = { Icon(Icons.Default.Add, null) })
+                                DropdownMenuItem(text = { Text(activity.getString(R.string.new_tab)) }, onClick = ::newTab,
+                                    leadingIcon = { Icon(Icons.Default.Add, null) })
+                                DropdownMenuItem(text = { Text(activity.getString(R.string.home)) }, onClick = {
+                                    menu = false; engine.home(active.id)
+                                    model.change { it.updateTab(it.activeTabId, "", activity.getString(R.string.new_tab)) }
+                                }, leadingIcon = { Icon(Icons.Default.Home, null) })
                                 DropdownMenuItem(text = { Text(if (data.bookmarks.any { it.url == active.url }) activity.getString(R.string.remove_bookmark) else activity.getString(R.string.bookmark_page)) },
                                     enabled = active.url.isNotEmpty(), onClick = { menu = false; model.change { it.toggleBookmark(System.currentTimeMillis()) } },
                                     leadingIcon = { Icon(Icons.Default.BookmarkBorder, null) })
-                                listOf(activity.getString(R.string.bookmarks), activity.getString(R.string.history), activity.getString(R.string.settings)).forEach { name ->
-                                    DropdownMenuItem(text = { Text(name) }, onClick = { menu = false; panel = name })
+                                listOf(BrowserPanel.BOOKMARKS to R.string.bookmarks, BrowserPanel.HISTORY to R.string.history,
+                                    BrowserPanel.SETTINGS to R.string.settings).forEach { (value, label) ->
+                                    DropdownMenuItem(text = { Text(activity.getString(label)) }, onClick = { openPanel(value) })
                                 }
-                                DropdownMenuItem(text = { Text(activity.getString(R.string.share_page)) }, enabled = active.url.isNotEmpty(),
-                                    onClick = { menu = false; activity.share(active.url) }, leadingIcon = { Icon(Icons.Default.Share, null) })
+                            }
+                        }
+                    }
+                    if (!editing) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically) {
+                        ToolButton(Icons.AutoMirrored.Filled.ArrowBack, activity.getString(R.string.back), status.back) { engine.back(active.id) }
+                        ToolButton(Icons.AutoMirrored.Filled.ArrowForward, activity.getString(R.string.forward), status.forward) { engine.forward(active.id) }
+                        ToolButton(Icons.Default.Share, activity.getString(R.string.share_page), active.url.isNotEmpty()) { activity.share(active.url) }
+                        ToolButton(Icons.Default.Bookmarks, activity.getString(R.string.bookmarks)) { openPanel(BrowserPanel.BOOKMARKS) }
+                        Box {
+                            Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surface,
+                                modifier = Modifier.testTag("tabs-button").combinedClickable(
+                                    onClick = { openPanel(BrowserPanel.TABS) },
+                                    onLongClickLabel = activity.getString(R.string.tab_actions), onLongClick = { tabMenu = true })) {
+                                Box(Modifier.heightIn(min = 48.dp).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
+                                    Text(activity.getString(R.string.tab_count, data.tabs.size), color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                            DropdownMenu(expanded = tabMenu, onDismissRequest = { tabMenu = false }) {
+                                DropdownMenuItem(text = { Text(activity.getString(R.string.new_tab)) }, onClick = ::newTab)
+                                DropdownMenuItem(text = { Text(activity.getString(R.string.close_current_tab)) }, onClick = {
+                                    tabMenu = false; model.change { it.closeTab(it.activeTabId) }
+                                })
+                                DropdownMenuItem(text = { Text(activity.getString(R.string.close_other_tabs)) }, enabled = data.tabs.size > 1,
+                                    onClick = { tabMenu = false; model.change { it.closeOtherTabs() } })
                             }
                         }
                     }
@@ -138,7 +171,7 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
                             Text(bookmark.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
-                    TextButton(onClick = { panel = activity.getString(R.string.bookmarks) }) { Text(activity.getString(R.string.bookmarks)) }
+                    TextButton(onClick = { openPanel(BrowserPanel.BOOKMARKS) }) { Text(activity.getString(R.string.bookmarks)) }
                 }
             } else {
                 AndroidView(factory = { FrameLayout(it) }, modifier = Modifier.fillMaxSize(), update = { container ->
@@ -150,31 +183,29 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
                     }
                 })
             }
+            if (editing) Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+                .clickable { dismissAddress() }.testTag("dismiss-address"))
         }
     }
 
-    if (panel != null) {
+    if (panel == BrowserPanel.TABS) {
+        TabOverview(data, onSelect = { id -> model.change { it.selectTab(id) }; panel = null },
+            onClose = { id -> model.change { it.closeTab(id) } }, onNew = ::newTab, onDone = { panel = null })
+    }
+    if (panel != null && panel != BrowserPanel.TABS) {
         ModalBottomSheet(onDismissRequest = { panel = null }) {
             Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(horizontal = 16.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (panel == "Tabs") activity.getString(R.string.tabs) else panel.orEmpty(), style = MaterialTheme.typography.headlineSmall)
-                    if (panel == "Tabs") TextButton(modifier = Modifier.testTag("add-tab"), onClick = {
-                        if (data.tabs.size >= MAX_TABS) model.showNotice(activity.getString(R.string.tab_limit, MAX_TABS))
-                        else { model.change { it.openTab() }; panel = null }
-                    }) { Text(activity.getString(R.string.new_tab)) }
-                    if (panel == activity.getString(R.string.history)) TextButton(onClick = { model.change { it.copy(history = emptyList()) } }) { Text(activity.getString(R.string.clear_history)) }
+                    Text(activity.getString(when (panel) {
+                        BrowserPanel.BOOKMARKS -> R.string.bookmarks
+                        BrowserPanel.HISTORY -> R.string.history
+                        else -> R.string.settings
+                    }), style = MaterialTheme.typography.headlineSmall)
+                    if (panel == BrowserPanel.HISTORY) TextButton(onClick = { model.change { it.copy(history = emptyList()) } }) { Text(activity.getString(R.string.clear_history)) }
                 }
                 when (panel) {
-                    "Tabs" -> LazyColumn {
-                        items(data.tabs, key = { it.id }) { tab ->
-                            ListItem(headlineContent = { Text(if (tab.id == active.id) "● ${tab.title}" else tab.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                supportingContent = { Text(tab.url.ifEmpty { activity.getString(R.string.home) }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                modifier = Modifier.clickable { model.change { it.selectTab(tab.id) }; panel = null },
-                                trailingContent = { IconButton(modifier = Modifier.testTag("close-tab"), onClick = { model.change { it.closeTab(tab.id) } }) { Icon(Icons.Default.Close, activity.getString(R.string.close_tab, tab.title)) } })
-                        }
-                    }
-                    activity.getString(R.string.bookmarks), activity.getString(R.string.history) -> {
-                        val records = if (panel == activity.getString(R.string.bookmarks)) data.bookmarks else data.history
+                    BrowserPanel.BOOKMARKS, BrowserPanel.HISTORY -> {
+                        val records = if (panel == BrowserPanel.BOOKMARKS) data.bookmarks else data.history
                         if (records.isEmpty()) Text(activity.getString(R.string.empty_list), Modifier.padding(vertical = 24.dp))
                         LazyColumn {
                             items(records, key = { it.url }) { record ->
@@ -182,13 +213,13 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
                                     supportingContent = { Text(record.url, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                     modifier = Modifier.clickable { model.navigate(record.url); panel = null },
                                     trailingContent = { ToolButton(Icons.Default.Close, activity.getString(R.string.remove_record, record.title)) {
-                                        model.change { snapshot -> if (panel == activity.getString(R.string.bookmarks)) snapshot.copy(bookmarks = snapshot.bookmarks.filterNot { it.url == record.url })
+                                        model.change { snapshot -> if (panel == BrowserPanel.BOOKMARKS) snapshot.copy(bookmarks = snapshot.bookmarks.filterNot { it.url == record.url })
                                             else snapshot.copy(history = snapshot.history.filterNot { it.url == record.url }) }
                                     } })
                             }
                         }
                     }
-                    activity.getString(R.string.settings) -> {
+                    BrowserPanel.SETTINGS -> {
                         Text(activity.getString(R.string.search_engine), Modifier.padding(top = 20.dp), style = MaterialTheme.typography.titleMedium)
                         SearchEngine.entries.forEach { option ->
                             Row(Modifier.fillMaxWidth().clickable { model.change { it.copy(settings = BrowserSettings(option.id)) } }, verticalAlignment = Alignment.CenterVertically) {
@@ -200,12 +231,24 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
                             Modifier.padding(vertical = 20.dp), style = MaterialTheme.typography.bodyMedium)
                         Text(activity.getString(R.string.history_notice), style = MaterialTheme.typography.bodySmall)
                     }
+                    else -> Unit
                 }
             }
         }
     }
 
-    pendingExternal?.let { uri ->
+    pendingLink?.takeIf { it.tabId == active.id }?.let { link ->
+        LinkActionsSheet(link.url, onDismiss = { pendingLink = null },
+            onOpen = { background ->
+                pendingLink = null
+                if (data.tabs.size >= MAX_TABS) model.showNotice(activity.getString(R.string.tab_limit, MAX_TABS))
+                else model.change { it.openTab(link.url, inBackground = background) }
+            },
+            onCopy = { pendingLink = null; activity.copyLink(link.url) },
+            onShare = { pendingLink = null; activity.share(link.url) })
+    }
+    pendingExternal?.takeIf { it.tabId == active.id }?.let { link ->
+        val uri = Uri.parse(link.url)
         AlertDialog(onDismissRequest = { pendingExternal = null }, title = { Text(activity.getString(R.string.open_app_title)) }, text = { Text(uri.toString().take(1024)) },
             confirmButton = { TextButton(onClick = { pendingExternal = null; if (!activity.openExternal(uri)) model.showNotice(activity.getString(R.string.no_app)) }) { Text(activity.getString(R.string.open_app)) } },
             dismissButton = { TextButton(onClick = { pendingExternal = null }) { Text(activity.getString(R.string.cancel)) } })

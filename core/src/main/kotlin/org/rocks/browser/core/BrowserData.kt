@@ -34,10 +34,11 @@ data class BrowserData(
     val activeTab: BrowserTab get() = tabs.firstOrNull { it.id == activeTabId } ?: tabs.first()
 
     /** 所有变更返回新快照，关闭最后一个标签时保持一个可用首页。 */
-    fun openTab(url: String = ""): BrowserData {
+    fun openTab(url: String = "", inBackground: Boolean = false): BrowserData {
         if (tabs.size >= MAX_TABS) return this
-        val tab = BrowserTab(url = url)
-        return copy(tabs = tabs + tab, activeTabId = tab.id)
+        val target = if (url.isEmpty()) "" else AddressResolver.normalizeWebUrl(url) ?: return this
+        val tab = BrowserTab(url = target)
+        return copy(tabs = tabs + tab, activeTabId = if (inBackground) activeTabId else tab.id)
     }
 
     fun closeTab(id: String): BrowserData {
@@ -49,6 +50,16 @@ data class BrowserData(
     }
 
     fun selectTab(id: String) = if (tabs.any { it.id == id }) copy(activeTabId = id) else this
+
+    /** 地址栏横划只切换相邻标签，到达两端时停留，不循环或隐式新建。 */
+    fun selectAdjacentTab(next: Boolean): BrowserData {
+        val index = tabs.indexOfFirst { it.id == activeTabId }
+        if (index < 0) return this
+        val neighbor = tabs.getOrNull(index + if (next) 1 else -1) ?: return this
+        return selectTab(neighbor.id)
+    }
+
+    fun closeOtherTabs(): BrowserData = copy(tabs = listOf(activeTab), activeTabId = activeTab.id)
 
     fun updateTab(id: String, url: String, title: String? = null): BrowserData = copy(
         tabs = tabs.map { if (it.id == id) it.copy(url = url, title = title ?: it.title) else it },

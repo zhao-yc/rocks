@@ -58,6 +58,61 @@ class BrowserCoreTest {
         assertEquals(state, state.openTab("https://extra.example"))
     }
 
+    @Test fun addressBarSwipeSelectsNeighborsWithoutChangingTabsOrHistory() {
+        val state = BrowserData().openTab("https://example.com/").openTab("https://example.org/")
+        val previous = state.selectAdjacentTab(next = false)
+        assertEquals(state.tabs[1].id, previous.activeTabId)
+        assertEquals(state.tabs, previous.tabs)
+        assertEquals(state.history, previous.history)
+        assertEquals(state, previous.selectAdjacentTab(next = true))
+    }
+
+    @Test fun backgroundLinkCreatesANormalizedTabWithoutSwitchingOrRecordingAVisit() {
+        val original = BrowserData()
+        val background = original.openTab("HTTPS://Example.COM/path", inBackground = true)
+        assertEquals(2, background.tabs.size)
+        assertEquals(original.activeTabId, background.activeTabId)
+        assertEquals("https://example.com/path", background.tabs.last().url)
+        assertTrue(background.history.isEmpty())
+        assertEquals(background.tabs.last().id, background.selectAdjacentTab(next = true).activeTabId)
+    }
+
+    @Test fun linkTabsRejectUnsafeUrlsAndRespectTheLimitInBothModes() {
+        val original = BrowserData()
+        listOf("javascript:alert(1)", "file:///private", "https://user:password@example.com/", "intent://example").forEach { url ->
+            assertEquals(original, original.openTab(url))
+            assertEquals(original, original.openTab(url, inBackground = true))
+        }
+        var full = original
+        repeat(MAX_TABS - 1) { full = full.openTab() }
+        assertEquals(full, full.openTab("https://example.com/", inBackground = true))
+        assertEquals(full, full.openTab("https://example.com/"))
+    }
+
+    @Test fun addressBarSwipeStopsAtBothEndsAndWorksAfterClosingNeighbor() {
+        val first = BrowserData()
+        assertEquals(first, first.selectAdjacentTab(next = false))
+        assertEquals(first, first.selectAdjacentTab(next = true))
+        val state = first.openTab().openTab()
+        assertEquals(state, state.selectAdjacentTab(next = true))
+        val closed = state.closeTab(state.tabs[1].id)
+        assertEquals(first.activeTabId, closed.selectAdjacentTab(next = false).activeTabId)
+        assertEquals(closed, closed.selectTab(first.activeTabId).selectAdjacentTab(next = true))
+    }
+
+    @Test fun closingOtherTabsKeepsCurrentPageBookmarksHistoryAndSettings() {
+        var state = BrowserData().openTab("https://example.com/")
+        state = state.recordVisit(state.activeTabId, state.activeTab.url, "Example", 123).toggleBookmark(124)
+            .copy(settings = BrowserSettings("google"))
+        val closed = state.closeOtherTabs()
+        assertEquals(listOf(state.activeTab), closed.tabs)
+        assertEquals(state.activeTabId, closed.activeTabId)
+        assertEquals(state.bookmarks, closed.bookmarks)
+        assertEquals(state.history, closed.history)
+        assertEquals(state.settings, closed.settings)
+        assertEquals(closed, closed.closeOtherTabs())
+    }
+
     @Test fun lateCallbackFromClosedTabCannotCreateHistory() {
         val state = BrowserData()
         assertEquals(state, state.recordVisit("missing", "https://example.com", "Closed", 1))

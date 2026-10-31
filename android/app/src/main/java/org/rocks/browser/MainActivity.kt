@@ -2,6 +2,8 @@ package org.rocks.browser
 
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -14,9 +16,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.ui.graphics.Color
 import org.rocks.browser.core.AddressResolver
 
 data class DownloadRequest(val url: String, val userAgent: String, val disposition: String?, val mimeType: String?)
@@ -38,7 +37,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme(primary = Color(0xFF35614B), surface = Color(0xFFF8FAF7))) {
+            RocksTheme {
                 BrowserScreen(this)
             }
         }
@@ -71,6 +70,11 @@ class MainActivity : ComponentActivity() {
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"; putExtra(Intent.EXTRA_TEXT, url)
         }, getString(R.string.share_page)))
+    }
+
+    fun copyLink(url: String) {
+        if (!AddressResolver.isWebUrl(url)) return
+        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(getString(R.string.link), url))
     }
 
     /** 系统下载仅在用户确认后启动，文件名清理且加时间前缀避免覆盖。 */

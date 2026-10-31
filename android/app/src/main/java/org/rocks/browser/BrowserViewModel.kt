@@ -1,7 +1,6 @@
 package org.rocks.browser
 
 import android.app.Application
-import android.util.AtomicFile
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -19,31 +18,19 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     var data by mutableStateOf(BrowserData()); private set
     var ready by mutableStateOf(false); private set
     var notice by mutableStateOf<String?>(null); private set
-    private var writable = true
+    var hint by mutableStateOf<String?>(null); private set
     private val writes = Channel<BrowserData>(Channel.CONFLATED)
-    private val file = AtomicFile(File(application.filesDir, "browser-state.json"))
+    private val repository = SessionRepository(AtomicSessionFile(File(application.filesDir, "browser-state.json")))
 
     init {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                if (file.baseFile.exists() || File(file.baseFile.path + ".bak").exists()) {
-                    runCatching { file.openRead().bufferedReader().use { SessionCodec.decode(it.readText()) } }
-                        .onSuccess { restored -> withContext(Dispatchers.Main) { data = restored } }
-                        .onFailure { writable = false }
-                }
-            }
-            if (!writable) notice = getApplication<Application>().getString(R.string.restore_failed)
+            val restored = withContext(Dispatchers.IO) { runCatching { repository.restore() } }
+            restored.onSuccess { it?.let { snapshot -> data = snapshot } }
+                .onFailure { notice = getApplication<Application>().getString(R.string.restore_failed) }
             ready = true
             for (snapshot in writes) {
-                if (!writable) continue
                 val success = withContext(Dispatchers.IO) {
-                    runCatching {
-                        val stream = file.startWrite()
-                        try {
-                            stream.write(SessionCodec.encode(snapshot).toByteArray(Charsets.UTF_8))
-                            file.finishWrite(stream)
-                        } catch (error: Exception) { file.failWrite(stream); throw error }
-                    }.isSuccess
+                    runCatching { repository.save(snapshot) }.isSuccess
                 }
                 if (!success) notice = getApplication<Application>().getString(R.string.save_failed)
             }
@@ -57,13 +44,19 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         writes.trySend(data)
     }
 
-    fun navigate(input: String) {
+    fun navigate(input: String): Boolean {
         val target = AddressResolver.resolve(input, SearchEngine.fromId(data.settings.searchEngine))
         val url = target.url
-        if (url != null) change { it.updateTab(it.activeTabId, url, url) }
-        else notice = target.error
+        if (url != null && ready) {
+            change { it.updateTab(it.activeTabId, url, url) }
+            return true
+        }
+        notice = target.error
+        return false
     }
 
     fun showNotice(message: String) { notice = message }
     fun clearNotice() { notice = null }
+    fun showHint(message: String) { hint = message }
+    fun clearHint(message: String) { if (hint == message) hint = null }
 }

@@ -16,10 +16,13 @@ local.properties
 *.p12
 *.cer
 *.pem
+.signing/
+**/rocks-development-signing.json
 .env
 .env.*
 !.env.example
 node_modules/
+__pycache__/
 oh_modules/
 .hvigor/
 *.hprof

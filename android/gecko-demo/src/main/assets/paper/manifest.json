@@ -1,0 +1,14 @@
+{
+  "manifest_version": 2,
+  "name": "Rocks Paper",
+  "version": "1.0.0",
+  "description": "A local reading-style demo for Rocks. No native messaging or network requests.",
+  "browser_specific_settings": { "gecko": { "id": "paper@rocks.demo" } },
+  "permissions": ["storage"],
+  "browser_action": { "default_title": "Rocks Paper", "default_popup": "popup.html" },
+  "content_scripts": [{
+    "matches": ["http://*/*", "https://*/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }]
+}

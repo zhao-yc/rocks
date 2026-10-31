@@ -10,8 +10,8 @@ android {
         applicationId = "org.rocks.browser"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-dev"
+        versionCode = 4
+        versionName = "0.2.2-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
@@ -20,7 +20,23 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildTypes { release { isMinifyEnabled = false } }
+    val privateKeyPath = providers.environmentVariable("ROCKS_ANDROID_KEYSTORE").orNull
+    if (privateKeyPath != null) {
+        signingConfigs.create("rocksDevelopment") {
+            storeFile = file(privateKeyPath)
+            storeType = "PKCS12"
+            storePassword = providers.environmentVariable("ROCKS_ANDROID_STORE_PASSWORD").get()
+            keyAlias = providers.environmentVariable("ROCKS_ANDROID_KEY_ALIAS").get()
+            keyPassword = providers.environmentVariable("ROCKS_ANDROID_KEY_PASSWORD").get()
+        }
+    }
+    buildTypes {
+        getByName("debug") {
+            // 缺少私钥只产出未签名中间包，绝不自动改用临时调试密钥。
+            signingConfig = if (privateKeyPath == null) null else signingConfigs.getByName("rocksDevelopment")
+        }
+        release { isMinifyEnabled = false }
+    }
 }
 dependencies {
     implementation(project(":core"))

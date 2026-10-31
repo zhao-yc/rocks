@@ -1,5 +1,15 @@
 <resources>
     <string name="tabs">Tabs</string>
+    <string name="link">Link</string>
+    <string name="open_link_new_tab">Open in new tab</string>
+    <string name="open_link_background">Open in background tab</string>
+    <string name="copy_link">Copy link</string>
+    <string name="share_link">Share link</string>
+    <string name="done">Done</string>
+    <string name="clear_address">Clear address</string>
+    <string name="tab_actions">Tab actions</string>
+    <string name="close_current_tab">Close current tab</string>
+    <string name="close_other_tabs">Close other tabs</string>
     <string name="app_name">Rocks</string>
     <string name="search_hint">Search or enter address</string>
     <string name="stop_loading">Stop loading</string>
@@ -34,7 +44,7 @@
     <string name="restore_failed">Session could not be restored. The original file is preserved; changes will not be saved.</string>
     <string name="save_failed">Could not save this session. Check available storage.</string>
     <string name="unsupported_download">This download type is not supported yet (HTTP/HTTPS only).</string>
-    <string name="blocked_link">This link cannot be opened. Only websites and confirmed supported app links are allowed.</string>
+    <string name="unsupported_link_hint">This link is not supported yet. You are still on the current page.</string>
     <string name="certificate_error">Certificate error. Rocks blocked this connection; there is no bypass.</string>
     <string name="page_failed">The page could not be loaded. Check the address and your connection.</string>
     <string name="renderer_stopped">The web renderer stopped. Open the address again to retry.</string>
