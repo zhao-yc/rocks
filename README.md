@@ -10,7 +10,7 @@ The Android main line uses GeckoView with Firefox WebExtensions and the Rocks in
 
 **[Download Gecko 0.4.2 APK](https://github.com/zhao-yc/rocks/releases/download/v0.4.2-gecko/rocks-gecko-0.4.2.apk)** — Android 10+, ARM64, fixed development certificate, compatible with previous Gecko previews. The original WebView application uses a separate package and data store.
 
-The preview includes an immersive status bar, a floating toolbar that shrinks while reading, sideways tab switching, URL/session restoration, bookmarks/history, search settings, uploads/downloads, default-browser integration, find in page, per-tab desktop mode, website camera/microphone/location requests and curated Firefox extensions. System UI, hardware permissions, cutouts and gesture feel still require phone acceptance; this is a development preview. Complete extension-store integration, account sync, a password vault and private browsing are not implemented.
+The preview includes a protected top safe area with adaptive background and a blurred scroll-edge transition, a floating toolbar that shrinks while reading, sideways tab switching, URL/session restoration, bookmarks/history, search settings, uploads/downloads, default-browser integration, find in page, per-tab desktop mode, website camera/microphone/location requests and curated Firefox extensions. System UI, hardware permissions, cutouts and gesture feel still require phone acceptance; this is a development preview. Complete extension-store integration, account sync, a password vault and private browsing are not implemented.
 
 ## Original WebView scope
 

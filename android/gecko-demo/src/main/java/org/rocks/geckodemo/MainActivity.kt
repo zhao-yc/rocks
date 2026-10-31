@@ -15,6 +15,9 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -34,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -47,20 +52,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     private val browser: BrowserModel by viewModels()
+    private lateinit var topChrome: ImmersiveStatusBar
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT))
         window.isStatusBarContrastEnforced = false
-        lifecycle.addObserver(ImmersiveStatusBar(window))
+        topChrome = ImmersiveStatusBar(window)
+        lifecycle.addObserver(topChrome)
         if (savedInstanceState == null) handleWebIntent(intent)
         setContent {
             MaterialTheme(colorScheme = lightColorScheme(
@@ -69,7 +78,7 @@ class MainActivity : ComponentActivity() {
                 background = Color(0xFFF8F8F2), surface = Color(0xFFF8F8F2),
                 surfaceContainer = Color(0xFFEBEFE5), surfaceContainerHigh = Color(0xFFE5EADD),
                 onSurface = Color(0xFF202822), onSurfaceVariant = Color(0xFF526451),
-            )) { BrowserScreen(browser) }
+            )) { BrowserScreen(browser, topChrome) }
         }
     }
     private fun handleWebIntent(intent: Intent?) {
@@ -95,7 +104,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BrowserScreen(model: BrowserModel) {
+private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
     if (model.restoring) {
         Surface(Modifier.fillMaxSize()) { Box(contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
         return
@@ -167,6 +176,20 @@ private fun BrowserScreen(model: BrowserModel) {
     var draggingTabs by remember { mutableStateOf(false) }
     var bottomObscured by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
+    val topHeight = if (model.fullScreen) 0 else WindowInsets.safeDrawing.getTop(density)
+    val pageScope = BrowserPageScope(current.id, current.documentRevision, current.url)
+    val topReady = current.contentPainted && !current.error && !model.fullScreen && !showTabs && library == null
+    val topFallback = if (current.url == DemoPolicy.HOME) MaterialTheme.colorScheme.surface.toArgb() else TopChromePolicy.WHITE
+    val topSession = current.session.takeUnless { current.url == DemoPolicy.HOME }
+    val topScope = pageScope.takeUnless { current.url == DemoPolicy.HOME }
+    val topBackground = topChrome.backgroundFor(topSession, topScope, topFallback)
+    SideEffect {
+        topChrome.configure(topSession, topScope, topReady, topHeight, topFallback) {
+            if (!model.fullScreen && current.contentPainted && !current.error &&
+                model.selectedId == current.id && current in model.tabs)
+                BrowserPageScope(current.id, current.documentRevision, current.url) else null
+        }
+    }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val keyboardVisible = WindowInsets.ime.getBottom(density) > 0
@@ -238,63 +261,69 @@ private fun BrowserScreen(model: BrowserModel) {
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize()) {
-        // Web content fills this viewport. The toolbar is a sibling overlay, never a layout row.
-        Box(Modifier.fillMaxSize().then(if (model.fullScreen) Modifier else
-            Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)))
-            .imePadding()) {
-            HorizontalPager(state = pager, userScrollEnabled = false, beyondViewportPageCount = 1,
-                key = { model.tabs[it].id }, modifier = Modifier.fillMaxSize().onSizeChanged { contentWidth = it.width.toFloat() }) { index ->
-                val tab = model.tabs.getOrNull(index)
-                if (tab != null) {
-                    if (tab.url == DemoPolicy.HOME) HomeScreen(model,
-                        onOpen = { model.navigate(it) }, onExtensions = { showExtensions = true })
-                    else GeckoPage(tab.session, Modifier.fillMaxSize(), if (model.fullScreen) 0 else bottomObscured)
-                    if (tab.error) {
-                        Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter).statusBarsPadding(), color = MaterialTheme.colorScheme.errorContainer) {
-                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(stringResource(R.string.page_error), Modifier.weight(1f))
-                                TextButton(onClick = { model.reload() }) { Text(stringResource(R.string.retry)) }
+    Surface(modifier = Modifier.fillMaxSize(), color = Color(topBackground)) {
+        Box(Modifier.fillMaxSize()) {
+            // 系统安全区只在容器消费一次；底部悬浮栏仍为兄弟浮层，不随顶部效果改变网页尺寸。
+            Box(Modifier.fillMaxSize().then(if (model.fullScreen) Modifier else
+                Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
+                .imePadding()) {
+                HorizontalPager(state = pager, userScrollEnabled = false, beyondViewportPageCount = 1,
+                    key = { model.tabs[it].id }, modifier = Modifier.fillMaxSize().onSizeChanged { contentWidth = it.width.toFloat() }) { index ->
+                    val tab = model.tabs.getOrNull(index)
+                    if (tab != null) {
+                        if (tab.url == DemoPolicy.HOME) HomeScreen(model,
+                            onOpen = { model.navigate(it) }, onExtensions = { showExtensions = true })
+                        else GeckoPage(tab.session, Modifier.fillMaxSize(), if (model.fullScreen) 0 else bottomObscured,
+                            topChrome, !model.fullScreen)
+                        if (tab.error) {
+                            Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = MaterialTheme.colorScheme.errorContainer) {
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(stringResource(R.string.page_error), Modifier.weight(1f))
+                                    TextButton(onClick = { model.reload() }) { Text(stringResource(R.string.retry)) }
+                                }
                             }
                         }
                     }
                 }
-            }
-            Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding()) {
-                if (model.storageReadOnly || model.saveFailed) Surface(color = MaterialTheme.colorScheme.errorContainer) {
-                    Text(stringResource(if (model.storageReadOnly) R.string.restore_failed else R.string.save_failed),
-                        Modifier.padding(10.dp), style = MaterialTheme.typography.bodySmall)
+                Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()) {
+                    if (model.storageReadOnly || model.saveFailed) Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                        Text(stringResource(if (model.storageReadOnly) R.string.restore_failed else R.string.save_failed),
+                            Modifier.padding(10.dp), style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (current.progress < 100 && current.url != DemoPolicy.HOME) {
+                        LinearProgressIndicator(progress = { current.progress / 100f }, modifier = Modifier.fillMaxWidth())
+                    }
                 }
-                if (current.progress < 100 && current.url != DemoPolicy.HOME) {
-                    LinearProgressIndicator(progress = { current.progress / 100f }, modifier = Modifier.fillMaxWidth())
+                SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = with(density) { bottomObscured.toDp() }))
+                if (!model.fullScreen) {
+                    FloatingBrowserToolbar(model, compact, editing, address, { address = it }, focusRequester,
+                        addressGesture,
+                        onAddress = {
+                            if (compact) model.expandToolbar()
+                            else {
+                                val value = if (current.url == DemoPolicy.HOME) "" else current.url
+                                address = TextFieldValue(value, selection = TextRange(0, value.length))
+                                editing = true
+                            }
+                        },
+                        onSubmit = { if (model.navigate(address.text)) finishEditing() }, onCancel = ::finishEditing,
+                        onTabs = { showTabs = true }, onMenu = { showMenu = true },
+                        menuExpanded = showMenu, onDismissMenu = { showMenu = false },
+                        onExtensions = { showMenu = false; showExtensions = true },
+                        onLibrary = { showMenu = false; library = it },
+                        onSitePermissions = { showMenu = false; showSitePermissions = true },
+                        onShare = {
+                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"; putExtra(Intent.EXTRA_TEXT, current.url)
+                            }, shareLabel))
+                        },
+                        modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 600.dp).fillMaxWidth()
+                            .onSizeChanged { bottomObscured = it.height }
+                            .navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp))
                 }
             }
-            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = with(density) { bottomObscured.toDp() }))
-            if (!model.fullScreen) {
-                FloatingBrowserToolbar(model, compact, editing, address, { address = it }, focusRequester,
-                    addressGesture,
-                    onAddress = {
-                        if (compact) model.expandToolbar()
-                        else {
-                            val value = if (current.url == DemoPolicy.HOME) "" else current.url
-                            address = TextFieldValue(value, selection = TextRange(0, value.length))
-                            editing = true
-                        }
-                    },
-                    onSubmit = { if (model.navigate(address.text)) finishEditing() }, onCancel = ::finishEditing,
-                    onTabs = { showTabs = true }, onMenu = { showMenu = true },
-                    menuExpanded = showMenu, onDismissMenu = { showMenu = false },
-                    onExtensions = { showMenu = false; showExtensions = true },
-                    onLibrary = { showMenu = false; library = it },
-                    onSitePermissions = { showMenu = false; showSitePermissions = true },
-                    onShare = {
-                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"; putExtra(Intent.EXTRA_TEXT, current.url)
-                        }, shareLabel))
-                    },
-                    modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 600.dp).fillMaxWidth()
-                        .onSizeChanged { bottomObscured = it.height }
-                        .navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp))
+            if (!model.fullScreen) key(topScope) {
+                TopStatusArea(topChrome, topScope, topBackground, topHeight, TopChromePolicy.strength(current.topScrollY))
             }
         }
     }
@@ -354,24 +383,49 @@ private fun BrowserScreen(model: BrowserModel) {
 }
 
 @Composable
-private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured: Int = 0) {
+/** 会话的原生 View 只在主网页注册为顶部采样源，扩展面板沿用独立生命周期。 */
+private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured: Int = 0,
+    topChrome: ImmersiveStatusBar? = null, protectTopAndSides: Boolean = false) {
     key(session) {
         AndroidView(factory = { context ->
-            GeckoView(context).apply {
+            SafeGeckoView(context).apply {
+                this.protectTopAndSides = protectTopAndSides
                 setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
                 setSession(session)
+                topChrome?.attach(session, this)
             }
         }, modifier = modifier, update = { view ->
+            view.protectTopAndSides = protectTopAndSides
             // Keep bottom-fixed site controls visible without resizing the GeckoView or reserving
             // a blank toolbar strip. Gecko adjusts compositing for the overlay's measured height.
             view.setVerticalClipping(bottomObscured)
-        }, onReset = null, onRelease = { it.releaseSession() })
+        }, onReset = null, onRelease = {
+            topChrome?.release(session, it)
+            it.releaseSession()
+        })
+    }
+}
+
+/** 模糊延展只画在已留出的安全区，不接收触摸，也不覆盖网页中的可点击控件。 */
+@Composable
+private fun TopStatusArea(chrome: ImmersiveStatusBar, scope: BrowserPageScope?, backgroundColor: Int,
+    height: Int, targetStrength: Float) {
+    val strength by animateFloatAsState(targetStrength, tween(100), label = "顶部滚动过渡")
+    val image = chrome.imageFor(scope, height)
+    val background = Color(backgroundColor)
+    val density = LocalDensity.current
+    SideEffect { chrome.updateAppearance(backgroundColor, strength, image != null) }
+    Canvas(Modifier.fillMaxWidth().height(with(density) { height.toDp() })) {
+        drawRect(background)
+        if (image != null && strength > 0f) clipRect {
+            drawImage(image, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()), alpha = strength)
+        }
     }
 }
 
 @Composable
 private fun HomeScreen(model: BrowserModel, onOpen: (String) -> Unit, onExtensions: () -> Unit) {
-    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(24.dp).padding(bottom = 100.dp),
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).padding(bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.home_eyebrow), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)

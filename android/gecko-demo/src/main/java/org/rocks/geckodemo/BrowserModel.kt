@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -35,10 +37,19 @@ internal class BrowserTab(val id: Long, val session: GeckoSession, val extension
     var canGoForward by mutableStateOf(false)
     var error by mutableStateOf(false)
     var pendingUrl: String? = null
-    var documentRevision = 0L
+    var documentRevision by mutableLongStateOf(0L)
+    var topScrollY by mutableFloatStateOf(0f)
+    var contentPainted by mutableStateOf(false)
     var desktop by mutableStateOf(false)
     var recordingCamera by mutableStateOf(false)
     var recordingMicrophone by mutableStateOf(false)
+
+    /** 新文档开始时立即废弃旧截图与滚动位置，等待 Gecko 确认新内容已绘制。 */
+    fun beginDocument() {
+        documentRevision++
+        topScrollY = 0f
+        contentPainted = false
+    }
 }
 
 internal data class ExtensionPopup(val session: GeckoSession, val extensionId: String, val title: String)
@@ -135,7 +146,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     fun toggleDesktop() {
         val tab = current
         if (!DemoPolicy.isWebUrl(tab.url)) return
-        sitePermissions.cancel(); answerQuestion(false); finder.close(); tab.documentRevision++
+        sitePermissions.cancel(); answerQuestion(false); finder.close(); tab.beginDocument()
         tab.desktop = !tab.desktop
         tab.session.settings.userAgentMode = if (tab.desktop) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         tab.session.settings.viewportMode = if (tab.desktop) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE
@@ -305,7 +316,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     fun newTab(url: String?, select: Boolean = true, extensionBase: String? = null): BrowserTab? {
         if (tabs.size >= DemoPolicy.MAX_TABS) { notify(R.string.tab_limit); return null }
         if (url != null && !DemoPolicy.canLoad(url, extensionBase)) return null
-        val session = GeckoSession()
+        val session = BrowserGeckoSession()
         val tab = BrowserTab(nextId++, session, extensionBase)
         session.permissionDelegate = if (extensionBase == null) sitePermissions else deniedPermissions
         session.navigationDelegate = object : GeckoSession.NavigationDelegate {
@@ -340,7 +351,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 tab.error = false; tab.progress = 5
-                tab.documentRevision++
+                tab.beginDocument()
                 if (tab.id == selectedId) { sitePermissions.cancel(); finder.close(); answerQuestion(false); resetToolbar() }
             }
             override fun onProgressChange(session: GeckoSession, progress: Int) { tab.progress = progress }
@@ -364,6 +375,8 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         }
         session.compositorScrollDelegate = object : GeckoSession.CompositorScrollDelegate {
             override fun onScrollChanged(session: GeckoSession, update: GeckoSession.ScrollPositionUpdate) {
+                // 顶部效果跟随真实页面位置，脚本滚动不会因此触发底部工具栏收起。
+                if (update.scrollY.isFinite()) tab.topScrollY = update.scrollY.coerceAtLeast(0f)
                 if (tab.id != selectedId || !foreground || fullScreen) return
                 toolbarCollapsed = toolbarScroll.onScroll(update.scrollY, update.zoom,
                     update.source == GeckoSession.ScrollPositionUpdate.SOURCE_USER_INTERACTION,
@@ -371,6 +384,8 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             }
         }
         session.contentDelegate = object : GeckoSession.ContentDelegate {
+            override fun onFirstContentfulPaint(session: GeckoSession) { tab.contentPainted = true }
+            override fun onPaintStatusReset(session: GeckoSession) { tab.contentPainted = false }
             override fun onTitleChange(session: GeckoSession, title: String?) { tab.title = title.orEmpty().take(512); save() }
             override fun onCloseRequest(session: GeckoSession) { closeTab(tab.id) }
             override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
@@ -470,7 +485,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
 
     fun navigate(input: String): Boolean {
         val url = DemoPolicy.inputUrl(input, searchEngine) ?: run { notify(R.string.unsupported_link); return false }
-        sitePermissions.cancel(); finder.close(); current.documentRevision++
+        sitePermissions.cancel(); finder.close(); current.beginDocument()
         files.cancelPrompts(); answerQuestion(false); linkMenu = null
         current.pendingUrl = null
         closePopup(); current.url = url; current.error = false; current.session.loadUri(url)
@@ -478,10 +493,10 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         return true
     }
 
-    fun home() { sitePermissions.cancel(); finder.close(); current.documentRevision++; files.cancelPrompts(); current.pendingUrl = null; current.url = DemoPolicy.HOME; current.error = false; current.session.loadUri(DemoPolicy.HOME); save() }
+    fun home() { sitePermissions.cancel(); finder.close(); current.beginDocument(); files.cancelPrompts(); current.pendingUrl = null; current.url = DemoPolicy.HOME; current.error = false; current.session.loadUri(DemoPolicy.HOME); save() }
     fun back() { if (fullScreen) current.session.exitFullScreen() else if (current.canGoBack) current.session.goBack() }
     fun reload() {
-        sitePermissions.cancel(); finder.close(); current.documentRevision++; answerQuestion(false)
+        sitePermissions.cancel(); finder.close(); current.beginDocument(); answerQuestion(false)
         current.error = false
         if (!current.session.isOpen) { current.session.open(runtime); current.session.loadUri(current.url) }
         else current.session.reload()

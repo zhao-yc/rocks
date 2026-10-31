@@ -2,7 +2,19 @@
 
 The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.2-gecko (code 6) can update the 0.1/0.2/0.3 demo without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
 
-## 0.4.2 edge-to-edge polish
+## Safari-style top safe area
+
+Normal browsing now places web content below the Android status-bar/cutout safe area, including pages that declare `viewport-fit=cover`. The host consumes top and horizontal insets once; Gecko receives only the remaining CSS safe-area insets so websites do not add the same top gap again. Home, progress and error content share this layout. Website fullscreen releases the protected area and restores it on exit. The bottom toolbar and its occlusion hint remain unchanged.
+
+An independent native top surface follows the dominant background of the rendered page's top edge. Text and logos are filtered by a two-thirds color consensus; an ambiguous photograph retains the last valid color. New documents start white, while the native start page uses the Rocks surface color. System icons follow the final painted background with contrast hysteresis.
+
+After scrolling away from the top, a heavily blurred edge extension gradually appears inside the reserved status-bar area, reaching full strength at 24 CSS pixels and fading on return. It never moves/resizes the GeckoView or intercepts website controls. This approximates Safari's visible behavior using Gecko's rendering; it does not reproduce WebKit's DOM-based color rules pixel for pixel.
+
+Sampling uses PixelCopy on the Gecko TextureView's own Surface, not the app window, so the browser overlay cannot feed back into its input. Compositor draw events drive small captures (at most 128×64 pixels), with at least 67 ms between starts and one capture/processing request in flight. Blur runs off the UI thread and also works on Android 10/11. Pause, document/tab changes, view replacement, rotation and fullscreen invalidate old results; the current source is checked again at completion. Idle pages have no polling loop. Captures are recycled after processing, display frames are held only in memory, and no image is saved, logged or transmitted. No page script, bridge or permission is added.
+
+Phone acceptance must include Baidu and yinzon.com: clock/network/battery must not overlap the page's avatar/logo/menu, and their white headers must blend into a white top area. Also check long-page scrolling and return, sticky headers, photographs at the edge, Dark Reader, rapid tab switching, keyboard, cutouts/landscape, `viewport-fit=cover` with CSS `env()` padding, and website fullscreen/return. Device rendering and gesture smoothness cannot be established by JVM tests or CI builds.
+
+## Previous 0.4.2 edge-to-edge polish
 
 Web content now continues behind the transparent Android status bar; there is no fixed cream-colored top strip. The home page, loading/error notices, dialogs and sheets keep their own safe insets. Horizontal cutout/navigation safety remains, and Gecko continues receiving Android cutout/system insets. System clock, battery and connectivity indicators remain visible outside website fullscreen.
 
@@ -35,7 +47,7 @@ Phone acceptance:
 
 ## 0.3 immersive controls
 
-The app title row is removed. Web content fills a stable viewport behind the Android status bar and the floating bottom toolbar, while horizontal cutouts remain protected. Expanding or shrinking the toolbar does not resize the GeckoView or reserve a blank strip. Gecko receives a measured bottom-occlusion hint to keep bottom-fixed website controls clear of the overlay. Android system indicators remain available; website fullscreen still hides browser/system controls.
+The app title row is removed. Web content fills a stable viewport below the protected top safe area and behind the floating bottom toolbar, while horizontal cutouts remain protected. Expanding or shrinking the toolbar does not resize the GeckoView or reserve a blank strip. Gecko receives a measured bottom-occlusion hint to keep bottom-fixed website controls clear of the overlay. Android system indicators remain available; website fullscreen still hides browser/system controls.
 
 The toolbar uses Rocks sage/forest colors, a thin green outline and a single rounded surface. Scroll down through actual page content to collapse it into a small domain pill; scroll upward or tap the pill to expand. The first tap expands the pill; tap the expanded address to edit. Tap-sized targets remain at least 48 dp even in the compact state. Back, reload, tabs and More stay in the expanded bar; extensions, forward, bookmarking, share, start page and libraries move into More.
 
