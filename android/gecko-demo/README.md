@@ -1,8 +1,8 @@
 # Rocks Gecko development preview
 
-The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.2-gecko (code 6) can update the 0.1/0.2/0.3 demo without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
+The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.3-gecko (code 7) can update the existing Gecko preview without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
 
-## Safari-style top safe area
+## 0.4.3 Safari-style top safe area
 
 Normal browsing now places web content below the Android status-bar/cutout safe area, including pages that declare `viewport-fit=cover`. The host consumes top and horizontal insets once; Gecko receives only the remaining CSS safe-area insets so websites do not add the same top gap again. Home, progress and error content share this layout. Website fullscreen releases the protected area and restores it on exit. The bottom toolbar and its occlusion hint remain unchanged.
 

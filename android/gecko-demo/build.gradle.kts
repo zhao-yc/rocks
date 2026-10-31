@@ -11,8 +11,8 @@ android {
         applicationId = "org.rocks.browser.geckodemo"
         minSdk = 29
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.4.2-gecko"
+        versionCode = 7
+        versionName = "0.4.3-gecko"
         ndk { abiFilters += "arm64-v8a" }
     }
     buildFeatures { compose = true }

@@ -1,0 +1,129 @@
+name: Publish Gecko preview APK
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: '当前 main 提交已通过的 Gecko CI 运行编号'
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: publish-gecko-preview
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SOURCE_RUN: ${{ inputs.source_run_id }}
+      VERSION: '0.4.3'
+      VERSION_CODE: '7'
+    steps:
+      - uses: actions/checkout@v4
+      - name: 核对当前提交的 CI 与固定签名检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/source-run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs" > "$RUNNER_TEMP/source-jobs.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts" > "$RUNNER_TEMP/source-artifacts.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          run = json.loads((root / 'source-run.json').read_text())
+          assert run['head_sha'] == os.environ['GITHUB_SHA'], '构建提交不是当前发布提交'
+          assert run['path'] == '.github/workflows/gecko-demo.yml'
+          assert run['head_branch'] == 'main' and run['event'] == 'push'
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['repository']['full_name'] == os.environ['GITHUB_REPOSITORY']
+          steps = {step['name']: step['conclusion']
+                   for job in json.loads((root / 'source-jobs.json').read_text())['jobs']
+                   for step in job['steps']}
+          for name in ('Extension script tests', 'Portable data, persistence and browser policy tests',
+                       'Android lint', 'Assemble APK', 'Verify fixed signing when configured'):
+              assert steps.get(name) == 'success', f'检查未通过或被跳过：{name}'
+          artifacts = [item for item in json.loads((root / 'source-artifacts.json').read_text())['artifacts']
+                       if item['name'] == 'rocks-gecko-demo-apk' and not item['expired']]
+          assert len(artifacts) == 1, '必须有且仅有一个有效 APK 产物'
+          artifact = artifacts[0]
+          assert artifact['workflow_run']['head_sha'] == os.environ['GITHUB_SHA']
+          assert re.fullmatch(r'sha256:[0-9a-f]{64}', artifact['digest'])
+          gradle = Path('android/gecko-demo/build.gradle.kts').read_text()
+          assert re.search(r'versionName\s*=\s*"' + re.escape(os.environ['VERSION']) + r'-gecko"', gradle)
+          assert re.search(r'versionCode\s*=\s*' + os.environ['VERSION_CODE'] + r'\b', gradle)
+          with Path(os.environ['GITHUB_ENV']).open('a') as target:
+              target.write(f"SOURCE_ARTIFACT={artifact['id']}\nZIP_DIGEST={artifact['digest'][7:]}\n")
+              target.write(f"APK=rocks-gecko-{os.environ['VERSION']}.apk\nTAG=v{os.environ['VERSION']}-gecko\n")
+          PY
+      - name: 取回签名 APK 并核对产物摘要
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rocks-gecko-release"
+          cd "$RUNNER_TEMP/rocks-gecko-release"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$SOURCE_ARTIFACT/zip" > source.zip
+          printf '%s  source.zip\n' "$ZIP_DIGEST" | sha256sum --check --strict
+          python3 - <<'PY'
+          import os, zipfile
+          from pathlib import Path
+          # 按固定文件名读取，不使用归档内的路径进行解压。
+          with zipfile.ZipFile('source.zip') as archive:
+              assert archive.testzip() is None
+              apks = [name for name in archive.namelist() if name.endswith('.apk')]
+              assert len(apks) == 1
+              Path(os.environ['APK']).write_bytes(archive.read(apks[0]))
+          PY
+      - name: 校验实际证书、包名、版本与引擎
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          test -x "$ANDROID_HOME/build-tools/36.0.0/aapt"
+          cd "$RUNNER_TEMP/rocks-gecko-release"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" > certs.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" > badging.txt
+          python3 - <<'PY'
+          import json, os, re, zipfile
+          from pathlib import Path
+          expected = (Path(os.environ['GITHUB_WORKSPACE']) / 'android/development-signing.sha256').read_text().strip()
+          certs = re.findall(r'^Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)$', Path('certs.txt').read_text(), re.M)
+          assert certs == [expected], '实际签名与已有开发证书不一致'
+          package = Path('badging.txt').read_text().splitlines()[0]
+          assert "name='org.rocks.browser.geckodemo'" in package
+          assert f"versionCode='{os.environ['VERSION_CODE']}'" in package
+          assert f"versionName='{os.environ['VERSION']}-gecko'" in package
+          with zipfile.ZipFile(os.environ['APK']) as archive:
+              assert archive.testzip() is None
+              assert 'lib/arm64-v8a/libxul.so' in archive.namelist()
+              assert json.loads(archive.read('assets/paper/manifest.json'))['browser_specific_settings']['gecko']['id'] == 'paper@rocks.demo'
+              assert not any(name.lower().endswith(('.p12', '.jks', '.keystore', 'rocks-development-signing.json'))
+                             for name in archive.namelist())
+          print(package)
+          PY
+          sha256sum "$APK" > "$APK.sha256"
+      - name: 上传草稿并复核下载内容后公开预览版
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/rocks-gecko-release"
+          cp "$GITHUB_WORKSPACE/docs/releases/gecko-$VERSION.md" notes.md
+          printf '\n源码提交：`%s`。\n构建检查：https://github.com/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_REPOSITORY" "$SOURCE_RUN" >> notes.md
+          gh release create "$TAG" "$APK" "$APK.sha256" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "Rocks Gecko $VERSION — 顶部安全区与滚动模糊" \
+            --draft --prerelease --latest=false --notes-file notes.md
+          # 上传后重新下载草稿附件，校验实际字节，再将其转为公开预览版。
+          mkdir verified
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$APK" --dir verified
+          (cd verified && sha256sum --check --strict "../$APK.sha256")
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
+          printf '下载地址：https://github.com/%s/releases/download/%s/%s\n' "$GITHUB_REPOSITORY" "$TAG" "$APK" >> "$GITHUB_STEP_SUMMARY"
+          cat "$APK.sha256" >> "$GITHUB_STEP_SUMMARY"
