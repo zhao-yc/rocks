@@ -39,7 +39,8 @@ internal class ImmersiveStatusBar(private val window: Window) : DefaultLifecycle
     private val views = mutableMapOf<GeckoSession, GeckoView>()
     private val colors = mutableMapOf<GeckoSession, Pair<BrowserPageScope, Int>>()
     private val gate = TopChromeRequestGate()
-    private var page: Page? = null
+    // 页面身份也必须可观察：切到已经绘制的标签时，底色 getter 的分支会改变。
+    private var page by mutableStateOf<Page?>(null)
     private var currentScope: () -> BrowserPageScope? = { null }
     private var ready = false
     private var topHeight = 0
