@@ -43,6 +43,7 @@ jobs:
           echo "4cdc10bba644b44485d0260d7bff5969317ac5ea096008056e284b40c4139f33  rocks-0.2.2-debug.apk" | sha256sum --check --strict
       - name: Verify APK identity and signature
         run: |
+          set -euo pipefail
           cd "$RUNNER_TEMP/rocks-apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs rocks-0.2.2-debug.apk | tee "$RUNNER_TEMP/apk-certs.txt"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging rocks-0.2.2-debug.apk > "$RUNNER_TEMP/apk-badging.txt"
@@ -62,6 +63,7 @@ jobs:
           cat rocks-0.2.2-debug.apk.sha256
       - name: Publish public testing release
         run: |
+          set -euo pipefail
           cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
           Android 10+ debug 测试版，版本 0.2.2-dev。
 

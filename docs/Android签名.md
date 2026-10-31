@@ -22,7 +22,7 @@
 
 ## 本地构建
 
-使用同一配置运行 prepare，或在构建进程中提供以下环境变量：`ROCKS_ANDROID_KEYSTORE`、`ROCKS_ANDROID_KEY_ALIAS`、`ROCKS_ANDROID_STORE_PASSWORD`、`ROCKS_ANDROID_KEY_PASSWORD`。Gradle 不再自动生成调试签名；无配置时输出 unsigned 中间包。
+在构建进程中提供以下环境变量：`ROCKS_ANDROID_KEYSTORE`、`ROCKS_ANDROID_KEY_ALIAS`、`ROCKS_ANDROID_STORE_PASSWORD`、`ROCKS_ANDROID_KEY_PASSWORD`。prepare 在 CI 中通过 `GITHUB_ENV` 传递这些参数，不会修改本地父 shell 的环境。Gradle 不再自动生成调试签名；无配置时输出 unsigned 中间包。
 
 签名后运行：
 

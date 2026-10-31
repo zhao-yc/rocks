@@ -1,8 +1,12 @@
 name: Gecko extension demo
 on:
   push:
-    branches: ['build/gecko-demo-20261021']
-    paths: ['android/gecko-demo/**', 'settings.gradle.kts', '.github/workflows/gecko-demo.yml']
+    branches: ['main']
+    paths: ['android/gecko-demo/**', 'android/app/src/**', 'android/development-signing.sha256', 'core/**', 'shared/**', 'scripts/**', 'settings.gradle.kts', '.github/workflows/gecko-demo.yml']
+  pull_request:
+    branches: ['main']
+    paths: ['android/gecko-demo/**', 'android/app/src/**', 'android/development-signing.sha256', 'core/**', 'shared/**', 'scripts/**', 'settings.gradle.kts', '.github/workflows/gecko-demo.yml']
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -25,6 +29,7 @@ jobs:
           test -d "$ANDROID_HOME/build-tools/36.0.0"
       - name: Prepare fixed development signing if configured
         id: signing
+        if: github.event_name != 'pull_request'
         env:
           ROCKS_ANDROID_SIGNING: ${{ secrets.ROCKS_ANDROID_SIGNING }}
         run: python3 scripts/android_signing.py prepare

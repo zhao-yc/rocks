@@ -394,7 +394,7 @@ private fun HomeScreen(model: BrowserModel, onOpen: (String) -> Unit, onExtensio
         Text(stringResource(R.string.try_pages), style = MaterialTheme.typography.titleMedium)
         OutlinedButton(onClick = { onOpen("https://example.org") }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.example_page)) }
         OutlinedButton(onClick = { onOpen("https://www.baidu.com") }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.baidu_page)) }
-        TextButton(onClick = { onOpen("https://github.com/zhao-yc/rocks/blob/build/gecko-demo-20261021/android/gecko-demo/README.md") }) {
+        TextButton(onClick = { onOpen("https://github.com/zhao-yc/rocks/blob/main/android/gecko-demo/README.md") }) {
             Text(stringResource(R.string.open_source))
         }
         Text(stringResource(R.string.demo_limits), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
