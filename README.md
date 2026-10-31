@@ -8,7 +8,7 @@ A small, free mobile browser without app ads, promotion slots or a news feed. Ro
 
 The Android main line uses GeckoView with Firefox WebExtensions and the Rocks interface. See [Gecko build and feature notes](android/gecko-demo/README.md) and the [verification record](docs/Gecko体验版验证.md).
 
-**[Download Gecko 0.4.2 APK](https://github.com/zhao-yc/rocks/releases/download/v0.4.2-gecko/rocks-gecko-0.4.2.apk)** — Android 10+, ARM64, fixed development certificate, compatible with previous Gecko previews. The original WebView application uses a separate package and data store.
+**[Download Gecko 0.4.3 APK](https://github.com/zhao-yc/rocks/releases/download/v0.4.3-gecko/rocks-gecko-0.4.3.apk)** — Android 10+, ARM64, fixed development certificate, compatible with previous Gecko previews. The original WebView application uses a separate package and data store.
 
 The preview includes a protected top safe area with adaptive background and a blurred scroll-edge transition, a floating toolbar that shrinks while reading, sideways tab switching, URL/session restoration, bookmarks/history, search settings, uploads/downloads, default-browser integration, find in page, per-tab desktop mode, website camera/microphone/location requests and curated Firefox extensions. System UI, hardware permissions, cutouts and gesture feel still require phone acceptance; this is a development preview. Complete extension-store integration, account sync, a password vault and private browsing are not implemented.
 

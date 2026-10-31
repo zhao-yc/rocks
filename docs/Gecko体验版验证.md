@@ -1,3 +1,16 @@
+# Gecko 0.4.3 顶部安全区与滚动模糊（2026-10-31）
+
+- 源码提交：`ef9ab46bb796d255c146bf66080f9ed64d92ceff`，版本 `0.4.3-gecko` / versionCode 7；沿用包名 `org.rocks.browser.geckodemo` 与固定证书，可覆盖已有 Gecko 体验版。
+- 统一网页与原生起始页的顶部安全区，修正百度入口、英纵 Logo/菜单与系统时间和电量重叠。顶部背景按网页边缘主色衔接，并加入原生滚动模糊过渡；修正 CSS 安全边距重复消费与已加载标签的底色重绘。详细内容与真机待验项见 [顶部浏览体验验收](顶部浏览体验验收.md)。
+- [Gecko CI](https://github.com/zhao-yc/rocks/actions/runs/41216388586) 成功：扩展脚本、核心与应用单元测试、lint、APK 编译、实际固定签名校验和临时签名材料清理均通过。[原 WebView 回归](https://github.com/zhao-yc/rocks/actions/runs/41216388521) 亦成功，没有运行可选模拟器任务。
+- 用户明确授权公开 APK 后，新增仅手动触发的发布入口；必须引用当前 main 提交已成功且已实际验签的 Gecko 构建。PR 和普通推送不能自动发布，也不恢复已归档的历史发布脚本。
+- [发布运行](https://github.com/zhao-yc/rocks/actions/runs/41216657924) 成功：核对源提交、工作流、产物 ZIP 摘要、APK 实际证书、包名、版本、ARM64 Gecko 引擎和 Paper 扩展；草稿上传后重新下载完整 APK 并核对 SHA-256，随后转为公开预览版。
+- 签名证书 SHA-256 保持 `61fd4f1cf391cb98b53030f008aa0dd57dae4a91fac1bf3525f8db013065acaf`。未生成新密钥，没有将私钥复制到本机或公开资产。
+- [公开 APK](https://github.com/zhao-yc/rocks/releases/download/v0.4.3-gecko/rocks-gecko-0.4.3.apk)：164995543 字节，SHA-256 `b095b7450c15a31bc00bf1ecbc13f144e17333a925d3ec5384392094ae87e561`。公开资产元数据与摘要文件一致，已匿名取回 APK/ZIP 文件头，确认下载地址有效。
+- 尚未执行本轮真机视觉验收；本包交给用户在手机上测试百度、英纵以及深浅色切换、横屏、键盘和网站全屏返回。
+
+---
+
 # Gecko 0.4.2 状态栏与浮栏修正（2026-10-27）
 
 - 源码提交：`6e6f25d1d8e1c18b53b12c28b09b3adb93c7a7ec`，版本 `0.4.2-gecko` / versionCode 6。沿用包名和固定证书，可覆盖之前 Gecko 体验版。
