@@ -243,9 +243,12 @@ private fun BrowserScreen(model: BrowserModel) {
                 }
             })
 
-    LaunchedEffect(model.selectedId, model.tabs.size) {
+    LaunchedEffect(model.selectedId, model.tabs.size, draggingTabs) {
+        // 模型选择不能因上一段动画尚未结束而被永久跳过；手势结束后再对齐实际内容页。
+        // 程序切换立即落在目标页，地址栏拖动仍由原来的跟手动画处理。
+        if (draggingTabs) return@LaunchedEffect
         val index = model.tabs.indexOfFirst { it.id == model.selectedId }
-        if (index >= 0 && pager.settledPage != index && !pager.isScrollInProgress) pager.animateScrollToPage(index)
+        if (index >= 0 && (pager.currentPage != index || pager.currentPageOffsetFraction != 0f)) pager.scrollToPage(index)
     }
     LaunchedEffect(model.notice) {
         model.notice?.let { message ->

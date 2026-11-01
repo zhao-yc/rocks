@@ -3,11 +3,14 @@ package org.rocks.geckodemo;
 import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Intent;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.KeyEvent;
+import android.view.View;
+import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityNodeInfo;
 import java.lang.reflect.Method;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -15,12 +18,15 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import org.mozilla.geckoview.GeckoSessionSettings;
+import org.mozilla.geckoview.GeckoSession;
+import org.mozilla.geckoview.GeckoView;
 
 /** 使用现有原生 runner 验证真实引擎与 Compose 输入，不添加产品调试桥或测试框架依赖。 */
 final class DailyBrowserActionsChecks {
     private final Instrumentation instrumentation;
     private final String base;
     private BrowserModel model;
+    private Activity activity;
 
     /** 只允许显式提供回环夹具的模拟器；本测试会整理测试标签，不应在用户手机上运行。 */
     static void verify(Instrumentation instrumentation, String base) throws ReflectiveOperationException {
@@ -39,7 +45,7 @@ final class DailyBrowserActionsChecks {
 
     /** 按真实事件顺序覆盖初始化空白、关闭恢复、停止完成及错误空白回退。 */
     private void run() throws ReflectiveOperationException {
-        Activity activity = instrumentation.startActivitySync(new Intent(Intent.ACTION_VIEW, Uri.parse(base + "one"))
+        activity = instrumentation.startActivitySync(new Intent(Intent.ACTION_VIEW, Uri.parse(base + "one"))
                 .setClass(instrumentation.getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         Method getter = MainActivity.class.getDeclaredMethod("getBrowser");
         getter.setAccessible(true);
@@ -123,12 +129,36 @@ final class DailyBrowserActionsChecks {
         awaitState("匹配已有标签", () -> (base + "one").equals(model.getCurrent().getUrl()));
         onMain(() -> check(model.getTabs().size() == before[0], "切换已有标签额外新建了标签"));
         awaitNoEditor();
+        awaitVisibleSelectedPage();
     }
 
     /** 成功状态同时核对网址、加载结束和错误标记，不能只依据进度值。 */
     private void awaitPage(String suffix) {
         awaitState("夹具页面 " + suffix, () -> (base + suffix).equals(model.getCurrent().getUrl()) &&
                 !model.getCurrent().getLoading() && !model.getCurrent().getError());
+        awaitVisibleSelectedPage();
+    }
+
+    /** 模型选中不代表网页已切换，必须找到同一会话占据视口的真实 GeckoView。 */
+    private void awaitVisibleSelectedPage() {
+        awaitState("选中会话实际可见", () -> {
+            View root = activity.getWindow().getDecorView();
+            return visibleSession(root, model.getCurrent().getSession(), root.getWidth());
+        });
+    }
+
+    /** 排除分页预加载和仅露出边缘的相邻标签，避免模型检查掩盖显示错页。 */
+    private boolean visibleSession(View view, GeckoSession session, int windowWidth) {
+        if (!view.isShown()) return false;
+        if (view instanceof GeckoView && ((GeckoView) view).getSession() == session) {
+            Rect visible = new Rect();
+            return windowWidth > 0 && view.getGlobalVisibleRect(visible) && visible.width() >= windowWidth * 0.8f;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) if (visibleSession(group.getChildAt(i), session, windowWidth)) return true;
+        }
+        return false;
     }
 
     /** 只在主线程读取模型，并将异步异常带回 runner，而非造成应用主线程崩溃。 */
