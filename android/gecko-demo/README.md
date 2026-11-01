@@ -1,6 +1,12 @@
 # Rocks Gecko development preview
 
-The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.3-gecko (code 7) can update the existing Gecko preview without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
+The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.4-gecko (code 8) can update the existing Gecko preview without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
+
+## 0.4.4 display lifecycle crash fix
+
+GeckoView can release a null display before attachment or after detachment, even though GeckoSession annotates the parameter as non-null. The display-tracking subclass now preserves Gecko's Java runtime contract instead of inserting a Kotlin null check. Ownership errors still reach Gecko's original validation; the tracked reference is cleared only after a successful release. This fixes the crash reproduced with the public 0.4.3 APK when opening pages and restoring tabs.
+
+`assembleDebugAndroidTest` builds a small instrumentation APK without another test framework. Install it alongside the matching signed browser, then run `adb -s <serial> shell am instrument -w -r org.rocks.browser.geckodemo.test/org.rocks.geckodemo.DisplayLifecycleInstrumentation` on a compatible Android device. It exercises the real Gecko APIs for never-attached view release, release after an earlier display detach, and rejection of stale displays. A successful run prints three passed checks and `INSTRUMENTATION_CODE: -1`. This test does not replace visual acceptance on a phone.
 
 ## 0.4.3 Safari-style top safe area
 
