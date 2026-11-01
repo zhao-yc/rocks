@@ -209,6 +209,17 @@ private fun BrowserScreen(model: BrowserModel) {
         holdWebViewport = true
         model.current.session.setFocused(false)
     }
+    /** 资料入口共用同一覆盖层；下载和设置仍使用原有工作表。 */
+    fun openLibrary(page: LibraryPage) {
+        showMenu = false
+        if (page == LibraryPage.BOOKMARKS || page == LibraryPage.HISTORY) {
+            model.finder.close()
+            hub.open(model.selectedId, current.url,
+                if (page == LibraryPage.BOOKMARKS) AddressHubPage.BOOKMARKS else AddressHubPage.HISTORY, edit = false)
+            holdWebViewport = true
+            current.session.setFocused(false)
+        } else library = page
+    }
     // 新标签创建成功才发出编辑请求，选中状态完成重组后再聚焦，避免焦点竞态。
     fun createTab() {
         showMenu = false; showTabActions = false; showTabs = false
@@ -353,16 +364,7 @@ private fun BrowserScreen(model: BrowserModel) {
                         tabMenuExpanded = showTabActions, onTabMenu = { showTabActions = true },
                         onDismissTabMenu = { showTabActions = false }, onNewTab = ::createTab,
                         onExtensions = { showMenu = false; showExtensions = true },
-                        onLibrary = {
-                            showMenu = false
-                            if (it == LibraryPage.BOOKMARKS || it == LibraryPage.HISTORY) {
-                                model.finder.close()
-                                hub.open(model.selectedId, current.url,
-                                    if (it == LibraryPage.BOOKMARKS) AddressHubPage.BOOKMARKS else AddressHubPage.HISTORY, edit = false)
-                                holdWebViewport = true
-                                current.session.setFocused(false)
-                            } else library = it
-                        },
+                        onLibrary = ::openLibrary,
                         onSitePermissions = { showMenu = false; showSitePermissions = true },
                         onShare = {
                             context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
@@ -398,7 +400,7 @@ private fun BrowserScreen(model: BrowserModel) {
     if (showTabs) TabOverview(model, onNewTab = ::createTab) { showTabs = false }
     library?.let { page ->
         ModalBottomSheet(onDismissRequest = { library = null }) {
-            LibraryPanel(model, page) { library = null }
+            LibraryPanel(model, page, ::openLibrary) { library = null }
         }
     }
     model.linkMenu?.let { target ->

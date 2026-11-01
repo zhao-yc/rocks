@@ -17,11 +17,13 @@ import org.mozilla.geckoview.ScreenLength;
 public final class DisplayLifecycleInstrumentation extends Instrumentation {
     private String safeAreaUrl;
     private String dailyActionsUrl;
+    private String addressHubUrl;
     @Override
     public void onCreate(final Bundle arguments) {
         super.onCreate(arguments);
         safeAreaUrl = arguments == null ? null : arguments.getString("safe_area_url");
         dailyActionsUrl = arguments == null ? null : arguments.getString("daily_actions_url");
+        addressHubUrl = arguments == null ? null : arguments.getString("address_hub_url");
         start();
     }
 
@@ -30,6 +32,12 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
     public void onStart() {
         final Bundle result = new Bundle();
         try {
+            if (addressHubUrl != null) {
+                AddressHubChecks.verify(this, addressHubUrl);
+                result.putString("stream", "资料面板回归：键盘、全选、分类与草稿、独立搜索、旋转、一次返回、菜单入口、指定恢复及真实网站图标均通过\n");
+                finish(Activity.RESULT_OK, result);
+                return;
+            }
             if (dailyActionsUrl != null) {
                 DailyBrowserActionsChecks.verify(this, dailyActionsUrl);
                 result.putString("stream", "日常浏览回归：末页恢复、桌面模式、程序关闭、标签上限、停止、真实失败、输入反馈、新建聚焦及标签匹配均通过\n");

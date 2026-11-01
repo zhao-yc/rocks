@@ -1,0 +1,212 @@
+package org.rocks.geckodemo
+
+import android.app.Activity
+import android.app.Instrumentation
+import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.SystemClock
+import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
+import android.view.accessibility.AccessibilityNodeInfo
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import kotlinx.coroutines.*
+import org.json.JSONObject
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoView
+import org.rocks.browser.core.PageRecord
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.atomic.AtomicReference
+
+/** 显式、隔离的原生面板验收，只可在本机夹具与专用模拟器上运行。 */
+internal object AddressHubChecks {
+    @JvmStatic fun verify(instrumentation: Instrumentation, base: String) {
+        check(Build.HARDWARE in listOf("ranchu", "goldfish") && base == "http://127.0.0.1:8878/") {
+            "资料面板回归仅允许专用模拟器与指定回环夹具"
+        }
+        Checks(instrumentation, base).run()
+    }
+
+    private class Checks(val inst: Instrumentation, val base: String) {
+        lateinit var activity: Activity
+        lateinit var model: BrowserModel
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+        /** 同时验证真正的输入焦点、视图几何、配置重建与网站图标。 */
+        fun run() {
+            activity = inst.startActivitySync(Intent(Intent.ACTION_VIEW, Uri.parse(base + "one"))
+                .setClass(inst.targetContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            val getter = MainActivity::class.java.getDeclaredMethod("getBrowser").apply { isAccessible = true }
+            model = main { getter.invoke(activity) as BrowserModel }
+            try {
+                await("夹具网页加载") { !model.restoring && model.current.url == base + "one" && !model.current.loading }
+                main {
+                    model.bookmarks.clear()
+                    model.bookmarks.add(PageRecord(base + "one", "面板收藏", System.currentTimeMillis()))
+                }
+                val original = main { gecko(activity.window.decorView, model.current.session) ?: error("缺少当前网页") }
+                val dimensions = main { original.width to original.height }
+                click("127.0.0.1")
+                await("首次键盘与面板") { model.addressHub.visible && ime() }
+                val field = editable()
+                check(field.textSelectionStart == 0 && field.textSelectionEnd == field.text?.length) { "首次进入没有全选实际网址" }
+                main { check(gecko(activity.window.decorView, model.current.session) === original &&
+                    (original.width to original.height) == dimensions) { "面板或键盘改变了原网页视图" } }
+                setText("面板草稿")
+                val selection = Bundle().apply {
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 1)
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, 3)
+                }
+                check(editable().performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selection)) { "无法设置原生光标范围" }
+                await("原生光标同步") { model.addressHub.address.selection.start == 1 && model.addressHub.address.selection.end == 3 }
+                click(inst.targetContext.getString(R.string.bookmarks))
+                await("主动分类收键盘") { model.addressHub.visible && model.addressHub.page == AddressHubPage.BOOKMARKS && !ime() }
+                main { check(model.addressHub.address.text == "面板草稿" && model.addressHub.address.selection.start == 1) { "切分类丢失草稿或光标" } }
+                click(inst.targetContext.getString(R.string.search_bookmarks))
+                setText("面板")
+                await("书签焦点独立") { model.addressHub.bookmarkQuery == "面板" && model.addressHub.input == HubInput.BOOKMARKS && ime() }
+                check(findAll(inst.uiAutomation.rootInActiveWindow) { it.isEditable && it.isFocused }.size == 1) { "两个编辑框同时获得焦点" }
+
+                val monitor = inst.addMonitor(MainActivity::class.java.name, null, false)
+                main { activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                activity = monitor.waitForActivityWithTimeout(8000) ?: error("旋转后没有重建页面")
+                inst.removeMonitor(monitor)
+                await("旋转后保留面板") {
+                    model.addressHub.visible && model.addressHub.page == AddressHubPage.BOOKMARKS &&
+                        model.addressHub.bookmarkQuery == "面板" && activity.window.decorView.hasWindowFocus() && ime()
+                }
+                main { check(getter.invoke(activity) === model) { "旋转创建了另一份浏览模型" } }
+                SystemClock.sleep(250)
+                inst.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                await("一次返回退出") { !model.addressHub.visible && !ime() }
+                main { check(model.current.url == base + "one") { "取消输入改变了原网页" } }
+
+                // 恢复竖屏后从更多菜单进入历史，不能再次强制唤起地址键盘。
+                val portrait = inst.addMonitor(MainActivity::class.java.name, null, false)
+                main { activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+                activity = portrait.waitForActivityWithTimeout(8000) ?: error("未恢复竖屏")
+                inst.removeMonitor(portrait)
+                click(inst.targetContext.getString(R.string.more))
+                click(inst.targetContext.getString(R.string.history))
+                await("菜单历史入口") { model.addressHub.visible && model.addressHub.page == AddressHubPage.HISTORY && !ime() }
+                click(inst.targetContext.getString(R.string.cancel))
+                await("关闭历史面板") { !model.addressHub.visible }
+
+                // 两条同运行内的记录均实际关闭引擎会话，随后点击较旧的那一条恢复。
+                val closures = main {
+                    model.clearClosedTabs()
+                    val first = model.newTab(base + "one")!!
+                    first.title = "指定恢复一"; model.closeTab(first.id, TabCloseCause.USER, false)
+                    val second = model.newTab(base + "two")!!
+                    second.title = "指定恢复二"; model.closeTab(second.id, TabCloseCause.USER, false)
+                    model.closedTabs.toList()
+                }
+                click("127.0.0.1")
+                click(inst.targetContext.getString(R.string.overview))
+                await("概览恢复入口") { model.addressHub.visible && !ime() }
+                click("指定恢复一")
+                await("恢复指定旧记录") { !model.addressHub.visible && model.closedTabs.none { it.closureId == closures.last().closureId } }
+                main { check(model.closedTabs.single().closureId == closures.first().closureId) { "误消费了最新恢复记录" } }
+                iconChecks()
+            } finally { scope.cancel() }
+        }
+
+        /** 使用真实 Gecko 请求和解码，覆盖回退、超时、体积限制及正负缓存。 */
+        private fun iconChecks() {
+            val png = loadIcon(base + "icon-case/png") ?: error("真实 PNG 解码失败")
+            check(png.width in 1..128 && png.height in 1..128) { "图标未限制像素尺寸" }
+            val before = stats().getInt("requests")
+            check(loadIcon(base + "icon-case/png") === png) { "内存缓存未复用位图" }
+            check(stats().getInt("requests") == before) { "缓存命中仍发起网络请求" }
+            listOf("ico", "relative/deep", "missing", "redirect", "loop", "timeout", "oversized", "broken").forEach {
+                check(loadIcon(base + "icon-case/" + it) != null) { "图标候选或标准回退失败：$it" }
+            }
+            val negative = "http://127.0.0.1:8879/icon-case/failure"
+            check(loadIcon(negative) == null) { "真实失败没有使用首字回退" }
+            val failureCount = stats().getInt("requests")
+            check(loadIcon(negative) == null && stats().getInt("requests") == failureCount) { "负缓存仍重复发起请求" }
+            val result = stats()
+            check(!result.getBoolean("sensitive")) { "图标请求携带了 Cookie、认证或来源地址" }
+            check(result.getInt("maximumActive") <= 2) { "图标请求超过并发限制" }
+            check(result.getJSONObject("paths").getInt("/icons/loop") == 4) { "没有执行重定向上限" }
+        }
+
+        /** 在主线程订阅仓库，在 instrumentation 工作线程等待，不能阻塞 Gecko 的主线程回调。 */
+        private fun loadIcon(url: String): Bitmap? {
+            data class Outcome(val value: Bitmap?, val error: Throwable?)
+            val outcome = AtomicReference<Outcome?>()
+            scope.launch {
+                try { outcome.set(Outcome(model.icons.load(url), null)) }
+                catch (failure: Throwable) { outcome.set(Outcome(null, failure)) }
+            }
+            await("图标请求结束") { outcome.get() != null }
+            val result = outcome.get()!!
+            result.error?.let { throw AssertionError("图标请求异常", it) }
+            return result.value
+        }
+
+        /** 只读取已确认的回环夹具计数，不接触账号或外部网络。 */
+        private fun stats(): JSONObject {
+            val connection = URL(base + "icon-stats").openConnection() as HttpURLConnection
+            connection.connectTimeout = 3000; connection.readTimeout = 3000
+            return try { JSONObject(connection.inputStream.bufferedReader().use { it.readText() }) } finally { connection.disconnect() }
+        }
+
+        private fun ime() = ViewCompat.getRootWindowInsets(activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+
+        /** 几何断言绑定实际会话，不以模型选中标记代替真实显示。 */
+        private fun gecko(view: View, session: GeckoSession): GeckoView? {
+            if (view is GeckoView && view.session === session) return view
+            if (view is ViewGroup) for (index in 0 until view.childCount) gecko(view.getChildAt(index), session)?.let { return it }
+            return null
+        }
+
+        /** 所有模型和 View 读取都在主线程进行，失败带回 runner。 */
+        private fun <T> main(action: () -> T): T {
+            val value = AtomicReference<T>(); val failure = AtomicReference<Throwable?>()
+            inst.runOnMainSync { try { value.set(action()) } catch (error: Throwable) { failure.set(error) } }
+            failure.get()?.let { throw AssertionError(it.message, it) }
+            return value.get()
+        }
+
+        private fun await(label: String, predicate: () -> Boolean) {
+            repeat(250) { if (main(predicate)) return; SystemClock.sleep(100) }
+            error("原生资料面板等待超时：$label")
+        }
+
+        /** 原生语义树动作替代坐标，兼容键盘动画和屏幕旋转。 */
+        private fun findAll(root: AccessibilityNodeInfo?, predicate: (AccessibilityNodeInfo) -> Boolean): List<AccessibilityNodeInfo> {
+            if (root == null) return emptyList()
+            val result = mutableListOf<AccessibilityNodeInfo>()
+            if (predicate(root)) result += root
+            for (index in 0 until root.childCount) result += findAll(root.getChild(index), predicate)
+            return result
+        }
+
+        private fun node(predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo {
+            repeat(80) {
+                findAll(inst.uiAutomation.rootInActiveWindow, predicate).firstOrNull()?.let { return it }
+                SystemClock.sleep(100)
+            }
+            error("未找到原生资料面板控件")
+        }
+
+        private fun editable() = node { it.isEditable && it.isFocused }
+        private fun click(label: String) {
+            var target: AccessibilityNodeInfo? = node { it.text?.toString() == label || it.contentDescription?.toString() == label }
+            while (target != null && !target.isClickable) target = target.parent
+            check(target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) { "无法点击原生资料控件：$label" }
+        }
+
+        private fun setText(value: String) {
+            val arguments = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value) }
+            check(editable().performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) { "无法设置原生输入" }
+        }
+    }
+}

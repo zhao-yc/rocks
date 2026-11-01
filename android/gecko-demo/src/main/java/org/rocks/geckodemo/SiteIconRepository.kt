@@ -89,6 +89,8 @@ internal class SiteIconRepository(runtime: GeckoRuntime, cacheDir: File, private
     private suspend fun fetch(original: String): ByteArray = withTimeout(SiteIconPolicy.TIMEOUT) {
         var url = SiteIconPolicy.safeUrl(original) ?: error("图标地址无效")
         for (redirects in 0..3) {
+            // Gecko 158 的 IntDef 未声明位标记，但 fetch 的契约明确支持组合；两项保护必须同时保留。
+            @android.annotation.SuppressLint("WrongConstant")
             val response = await(executor.fetch(WebRequest.Builder(url).header("Accept", "image/*,text/html;q=0.8").build(),
                 GeckoWebExecutor.FETCH_FLAGS_ANONYMOUS or GeckoWebExecutor.FETCH_FLAGS_NO_REDIRECTS))
             if (response.statusCode in listOf(301, 302, 303, 307, 308)) {

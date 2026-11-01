@@ -32,7 +32,7 @@ internal enum class LibraryPage(val label: Int) {
 }
 
 @Composable
-internal fun LibraryPanel(model: BrowserModel, initial: LibraryPage, dismiss: () -> Unit) {
+internal fun LibraryPanel(model: BrowserModel, initial: LibraryPage, openReadingPage: (LibraryPage) -> Unit, dismiss: () -> Unit) {
     var page by remember(initial) { mutableStateOf(initial) }
     var bookmarkQuery by remember { mutableStateOf("") }
     var historyQuery by remember { mutableStateOf("") }
@@ -40,7 +40,10 @@ internal fun LibraryPanel(model: BrowserModel, initial: LibraryPage, dismiss: ()
     Column(Modifier.fillMaxWidth().heightIn(max = 650.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             LibraryPage.entries.forEach { item ->
-                TextButton(onClick = { page = item }) {
+                TextButton(onClick = {
+                    if (item == LibraryPage.BOOKMARKS || item == LibraryPage.HISTORY) { dismiss(); openReadingPage(item) }
+                    else page = item
+                }) {
                     Text(stringResource(item.label), fontWeight = if (page == item) FontWeight.Bold else FontWeight.Normal)
                 }
             }
