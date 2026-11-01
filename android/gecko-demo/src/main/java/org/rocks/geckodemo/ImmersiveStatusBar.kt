@@ -122,7 +122,8 @@ internal class ImmersiveStatusBar(private val window: Window) : DefaultLifecycle
 
     /** 图标依据合成后的背景切换深浅；强遮蔽让文字和照片不会直接出现在图标后面。 */
     fun updateAppearance(paintedBase: Int, strength: Float, hasImage: Boolean) {
-        val painted = TopChromePolicy.blend(paintedBase, frameAverage, if (hasImage) strength else 0f)
+        val softened = TopChromePolicy.blend(frameAverage, paintedBase, 0.12f)
+        val painted = TopChromePolicy.blend(paintedBase, softened, if (hasImage) strength else 0f)
         darkIcons = TopChromePolicy.darkIcons(painted, darkIcons)
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = darkIcons
     }

@@ -39,6 +39,7 @@ internal class BrowserTab(val id: Long, val session: GeckoSession, val extension
     var pendingUrl: String? = null
     var documentRevision by mutableLongStateOf(0L)
     var topScrollY by mutableFloatStateOf(0f)
+    var topScrollZoom by mutableFloatStateOf(1f)
     var contentPainted by mutableStateOf(false)
     var desktop by mutableStateOf(false)
     var recordingCamera by mutableStateOf(false)
@@ -48,6 +49,7 @@ internal class BrowserTab(val id: Long, val session: GeckoSession, val extension
     fun beginDocument() {
         documentRevision++
         topScrollY = 0f
+        topScrollZoom = 1f
         contentPainted = false
     }
 }
@@ -377,6 +379,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             override fun onScrollChanged(session: GeckoSession, update: GeckoSession.ScrollPositionUpdate) {
                 // 顶部效果跟随真实页面位置，脚本滚动不会因此触发底部工具栏收起。
                 if (update.scrollY.isFinite()) tab.topScrollY = update.scrollY.coerceAtLeast(0f)
+                if (update.zoom.isFinite() && update.zoom > 0f) tab.topScrollZoom = update.zoom
                 if (tab.id != selectedId || !foreground || fullScreen) return
                 toolbarCollapsed = toolbarScroll.onScroll(update.scrollY, update.zoom,
                     update.source == GeckoSession.ScrollPositionUpdate.SOURCE_USER_INTERACTION,

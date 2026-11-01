@@ -28,6 +28,13 @@ internal object TopChromePolicy {
     /** 完全回顶时没有纹理延展；脚本滚动也反映真实位置，但不影响底栏的滚动策略。 */
     fun strength(scrollY: Float): Float = if (scrollY.isFinite()) (scrollY / 24f).coerceIn(0f, 1f) else 0f
 
+    /** CSS 滚动量乘 Gecko 的缩放才是屏幕像素；视图只平移，不随滚动改变尺寸。 */
+    fun contentOffset(safeHeight: Int, scrollY: Float, zoom: Float): Int {
+        val safe = safeHeight.coerceAtLeast(0)
+        if (!scrollY.isFinite() || !zoom.isFinite() || zoom <= 0f) return safe
+        return (safe - scrollY.coerceAtLeast(0f) * zoom).coerceIn(0f, safe.toFloat()).roundToInt()
+    }
+
     /** 三次小半径盒式模糊接近高斯效果，旧 Android 同样可用，且始终只处理窄条小图。 */
     fun frame(pixels: IntArray, width: Int, height: Int, fallback: Int): Frame {
         require(width > 0 && height > 0 && pixels.size == width * height)
@@ -35,15 +42,7 @@ internal object TopChromePolicy {
         val background = background(pixels.copyOfRange(0, width * minOf(2, height)), fallback)
         var blurred = pixels.copyOf()
         repeat(3) { blurred = blur(blur(blurred, width, height, horizontal = true), width, height, horizontal = false) }
-        for (y in 0 until height) {
-            // 保留状态栏下方可辨识的模糊色彩；上方遮蔽较强，下缘承接真正的透明渐隐。
-            val position = y.toFloat() / (height - 1).coerceAtLeast(1)
-            val texture = 0.28f + 0.54f * position * position * (3f - 2f * position)
-            for (x in 0 until width) {
-                val index = y * width + x
-                blurred[index] = blend(background, blurred[index], texture)
-            }
-        }
+        // 保留同坐标真实画面的模糊结果；透明遮罩由独立绘制层合成，不烘焙不透明底色。
         return Frame(blurred, width, height, background, average(blurred))
     }
 

@@ -69,6 +69,17 @@ class TopChromePolicyTest {
         assertEquals(dark, TopChromePolicy.blend(white, dark, 1f))
     }
 
+    @Test fun nativeTopOffsetUsesPhysicalScrollIncludingZoomAndRestoresAtTheTop() {
+        assertEquals(72, TopChromePolicy.contentOffset(72, 0f, 3f))
+        assertEquals(36, TopChromePolicy.contentOffset(72, 12f, 3f))
+        assertEquals(0, TopChromePolicy.contentOffset(72, 24f, 3f))
+        assertEquals(0, TopChromePolicy.contentOffset(72, 800f, 3f))
+        assertEquals(72, TopChromePolicy.contentOffset(72, -10f, 3f))
+        assertEquals(72, TopChromePolicy.contentOffset(72, Float.NaN, 3f))
+        assertEquals(72, TopChromePolicy.contentOffset(72, 12f, Float.NaN))
+        assertEquals(0, TopChromePolicy.contentOffset(0, 12f, 3f))
+    }
+
     @Test fun scrollingSearchButtonRetainsBlurredColorUnderTheStatusBar() {
         // 白色页头下的蓝色搜索按钮应透出模糊色彩，不能被整块白色遮罩洗掉。
         val blue = 0xFF4D68F4.toInt()
@@ -80,6 +91,8 @@ class TopChromePolicyTest {
         val lowerEdge = frame.pixels.last()
         assertTrue((lowerEdge and 255) > (lowerEdge ushr 16 and 255) + 70)
         assertTrue((lowerEdge ushr 16 and 255) < 150)
+        // 模糊结果不再烘焙白底；大块纯蓝区域保留原色，由绘制层进行透明合成。
+        assertEquals(blue, lowerEdge)
         assertTrue(TopChromePolicy.darkIcons(frame.average, true))
     }
 

@@ -10,6 +10,26 @@ import org.mozilla.geckoview.GeckoView
 
 /** 宿主已避让顶部和两侧后，不再让 viewport-fit=cover 网页通过 CSS env 重复避让。 */
 internal class SafeGeckoView(context: Context) : GeckoView(context) {
+    var contentTopOffset = 0
+        private set
+
+    /** 视口高度保持完整；首屏整体下移，滚动时真实网页视图移到状态栏后面。 */
+    fun positionContentAtTop(offset: Int) {
+        val next = offset.coerceAtLeast(0)
+        if (contentTopOffset == next) return
+        contentTopOffset = next
+        translationY = next.toFloat()
+        updateScreenOrigin()
+    }
+
+    /** 平移不触发重新布局，必须同步真实屏幕坐标，保证点击与引擎坐标一致。 */
+    private fun updateScreenOrigin() {
+        if (!isAttachedToWindow) return
+        val display = (session as? BrowserGeckoSession)?.attachedDisplay ?: return
+        val location = IntArray(2)
+        getLocationOnScreen(location)
+        display.screenOriginChanged(location[0], location[1])
+    }
     var protectTopAndSides = true
         set(value) {
             if (field == value) return
@@ -46,5 +66,6 @@ internal class SafeGeckoView(context: Context) : GeckoView(context) {
         display.safeAreaInsetsChanged(if (protectTopAndSides) 0 else insets.top,
             if (protectTopAndSides) 0 else insets.right, insets.bottom,
             if (protectTopAndSides) 0 else insets.left)
+        updateScreenOrigin()
     }
 }

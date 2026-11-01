@@ -15,8 +15,6 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -45,8 +43,10 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -184,6 +184,8 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
     var bottomObscured by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val topHeight = if (model.fullScreen) 0 else WindowInsets.safeDrawing.getTop(density)
+    val topOffset = TopChromePolicy.contentOffset(topHeight, current.topScrollY, current.topScrollZoom)
+    val topEffectHeight = if (topHeight > 0) topHeight + with(density) { 18.dp.roundToPx() } else 0
     val pageScope = BrowserPageScope(current.id, current.documentRevision, current.url)
     val topReady = current.contentPainted && !current.error && !model.fullScreen && !showTabs && library == null
     val topFallback = if (current.url == DemoPolicy.HOME) MaterialTheme.colorScheme.surface.toArgb() else TopChromePolicy.WHITE
@@ -191,7 +193,7 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
     val topScope = pageScope.takeUnless { current.url == DemoPolicy.HOME }
     val topBackground = topChrome.backgroundFor(topSession, topScope, topFallback)
     SideEffect {
-        topChrome.configure(topSession, topScope, topReady, topHeight, topFallback) {
+        topChrome.configure(topSession, topScope, topReady, topEffectHeight, topFallback) {
             if (!model.fullScreen && current.contentPainted && !current.error &&
                 model.selectedId == current.id && current in model.tabs)
                 BrowserPageScope(current.id, current.documentRevision, current.url) else null
@@ -270,20 +272,22 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
 
     Surface(modifier = Modifier.fillMaxSize(), color = Color(topBackground)) {
         Box(Modifier.fillMaxSize()) {
-            // 系统安全区只在容器消费一次；底部悬浮栏仍为兄弟浮层，不随顶部效果改变网页尺寸。
+            // 网页保留完整高度并可移到状态栏后面；左右挖孔仍由宿主消费，底栏保持原有位置。
             Box(Modifier.fillMaxSize().then(if (model.fullScreen) Modifier else
-                Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
+                Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)))
                 .imePadding()) {
                 HorizontalPager(state = pager, userScrollEnabled = false, beyondViewportPageCount = 1,
-                    key = { model.tabs[it].id }, modifier = Modifier.fillMaxSize().onSizeChanged { contentWidth = it.width.toFloat() }) { index ->
+                    key = { model.tabs[it].id }, modifier = Modifier.fillMaxSize().clipToBounds().onSizeChanged { contentWidth = it.width.toFloat() }) { index ->
                     val tab = model.tabs.getOrNull(index)
                     if (tab != null) {
-                        if (tab.url == DemoPolicy.HOME) HomeScreen(model,
-                            onOpen = { model.navigate(it) }, onExtensions = { showExtensions = true })
+                        if (tab.url == DemoPolicy.HOME) Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
+                            HomeScreen(model, onOpen = { model.navigate(it) }, onExtensions = { showExtensions = true })
+                        }
                         else GeckoPage(tab.session, Modifier.fillMaxSize(), if (model.fullScreen) 0 else bottomObscured,
-                            topChrome, !model.fullScreen)
+                            topChrome, !model.fullScreen,
+                            TopChromePolicy.contentOffset(topHeight, tab.topScrollY, tab.topScrollZoom))
                         if (tab.error) {
-                            Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = MaterialTheme.colorScheme.errorContainer) {
+                            Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)), color = MaterialTheme.colorScheme.errorContainer) {
                                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(stringResource(R.string.page_error), Modifier.weight(1f))
                                     TextButton(onClick = { model.reload() }) { Text(stringResource(R.string.retry)) }
@@ -292,7 +296,7 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
                         }
                     }
                 }
-                Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()) {
+                Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
                     if (model.storageReadOnly || model.saveFailed) Surface(color = MaterialTheme.colorScheme.errorContainer) {
                         Text(stringResource(if (model.storageReadOnly) R.string.restore_failed else R.string.save_failed),
                             Modifier.padding(10.dp), style = MaterialTheme.typography.bodySmall)
@@ -330,7 +334,7 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
                 }
             }
             if (!model.fullScreen) key(topScope) {
-                TopStatusArea(topChrome, topScope, topBackground, topHeight, TopChromePolicy.strength(current.topScrollY))
+                TopStatusArea(topChrome, topScope, topBackground, topHeight, topOffset, topEffectHeight)
             }
         }
     }
@@ -392,7 +396,7 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
 @Composable
 /** 会话的原生 View 只在主网页注册为顶部采样源，扩展面板沿用独立生命周期。 */
 private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured: Int = 0,
-    topChrome: ImmersiveStatusBar? = null, protectTopAndSides: Boolean = false) {
+    topChrome: ImmersiveStatusBar? = null, protectTopAndSides: Boolean = false, topOffset: Int = 0) {
     key(session) {
         AndroidView(factory = { context ->
             SafeGeckoView(context).apply {
@@ -403,9 +407,11 @@ private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured:
             }
         }, modifier = modifier, update = { view ->
             view.protectTopAndSides = protectTopAndSides
+            view.positionContentAtTop(topOffset)
             // Keep bottom-fixed site controls visible without resizing the GeckoView or reserving
             // a blank toolbar strip. Gecko adjusts compositing for the overlay's measured height.
-            view.setVerticalClipping(bottomObscured)
+            // 首屏下移时补偿底部裁切，让网站固定底部控件保持在原来的可见位置。
+            view.setVerticalClipping(bottomObscured + topOffset)
         }, onReset = null, onRelease = {
             topChrome?.release(session, it)
             it.releaseSession()
@@ -416,36 +422,31 @@ private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured:
 /** 状态栏模糊在网页上沿渐隐；绘制层不接收触摸，也不改变网页尺寸和安全区。 */
 @Composable
 private fun TopStatusArea(chrome: ImmersiveStatusBar, scope: BrowserPageScope?, backgroundColor: Int,
-    height: Int, targetStrength: Float) {
-    val strength by animateFloatAsState(targetStrength, tween(100), label = "顶部滚动过渡")
-    val image = chrome.imageFor(scope, height)
+    height: Int, topOffset: Int, effectHeight: Int) {
+    val strength = if (height > 0) 1f - topOffset.toFloat() / height else 0f
+    val image = chrome.imageFor(scope, effectHeight)
     val background = Color(backgroundColor)
-    val density = LocalDensity.current
-    // 仅让效果越过安全区下缘，留白仍只消费一次；回顶时整个渐隐尾部消失。
-    val fadeHeight = if (scope != null && height > 0) 18.dp else 0.dp
+    val layerPaint = remember { Paint() }
     SideEffect { chrome.updateAppearance(backgroundColor, strength, image != null) }
-    Canvas(Modifier.fillMaxWidth().height(with(density) { height.toDp() } + fadeHeight)) {
-        val safeHeight = height.toFloat()
-        drawRect(background, size = Size(size.width, safeHeight))
-        if (image != null && strength > 0f && height > 0) {
-            clipRect(bottom = safeHeight) {
-                drawImage(image, dstSize = IntSize(size.width.roundToInt(), height), alpha = strength)
-            }
-            val tailHeight = (size.height - safeHeight).roundToInt()
-            if (tailHeight > 0) clipRect(top = safeHeight) {
-                // 单独的小图层承接最后一行模糊颜色；DstIn 只消隐效果，不擦除底下的网页。
-                drawIntoCanvas { canvas ->
-                    canvas.saveLayer(Rect(0f, safeHeight, size.width, size.height), Paint())
-                    drawImage(image, srcOffset = IntOffset(0, image.height - 1), srcSize = IntSize(image.width, 1),
-                        dstOffset = IntOffset(0, height), dstSize = IntSize(size.width.roundToInt(), tailHeight))
-                    drawRect(brush = Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = strength),
-                        0.35f to Color.Black.copy(alpha = strength * 0.82f),
-                        1f to Color.Transparent,
-                        startY = safeHeight, endY = size.height),
-                        blendMode = BlendMode.DstIn)
-                    canvas.restore()
-                }
+    val density = LocalDensity.current
+    Canvas(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+        .fillMaxWidth().height(with(density) { effectHeight.toDp() })) {
+        // 只填首屏确实没有网页的空隙，网页进入状态栏后不再铺不透明底色。
+        if (topOffset > 0) drawRect(background, size = Size(size.width, topOffset.toFloat()))
+        if (image != null && strength > 0f && height > 0) clipRect {
+            drawIntoCanvas { canvas ->
+                canvas.saveLayer(Rect(0f, 0f, size.width, size.height), layerPaint)
+                // 与底下真实 TextureView 使用相同位置和比例，禁止拉伸一行像素作延展。
+                drawImage(image, dstOffset = IntOffset(0, topOffset),
+                    dstSize = IntSize(size.width.roundToInt(), effectHeight))
+                drawRect(background.copy(alpha = 0.12f), topLeft = Offset(0f, topOffset.toFloat()))
+                val shoulder = (height.toFloat() / effectHeight).coerceIn(0.01f, 0.98f)
+                drawRect(brush = Brush.verticalGradient(
+                    0f to Color.Black.copy(alpha = strength),
+                    shoulder * 0.55f to Color.Black.copy(alpha = strength),
+                    shoulder to Color.Black.copy(alpha = strength * 0.88f),
+                    1f to Color.Transparent), blendMode = BlendMode.DstIn)
+                canvas.restore()
             }
         }
     }
