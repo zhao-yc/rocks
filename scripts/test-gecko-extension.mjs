@@ -161,9 +161,12 @@ test('事件合并限频、相同结果不重发，空闲无轮询，后台停�
   h.document.fullscreenElement = null; h.event('document', 'fullscreenchange'); h.advance(); assert.equal(h.reports.length, 3);
 });
 
-test('离开文档清理端口与任务，断开不会定时重连旧文档', () => {
-  const h = bottomHarness(); h.advance(); h.ports[0].disconnected(); h.advance(1000); assert.equal(h.ports.length, 1);
-  h.event('window', 'focus'); h.advance(); assert.equal(h.ports.length, 2);
+test('连接失败仅有界重试，离开文档清理端口与所有任务', () => {
+  const h = bottomHarness(); h.advance();
+  for (let i = 0; i < 4; i++) { h.ports.at(-1).disconnected(); h.advance(1000); }
+  assert.equal(h.ports.length, 5);
+  h.ports.at(-1).disconnected(); h.advance(10000); assert.equal(h.ports.length, 5);
+  h.event('window', 'focus'); h.advance(); assert.equal(h.ports.length, 6);
   h.event('window', 'scroll'); h.event('window', 'pagehide'); assert.equal(h.tasks.size, 0);
 });
 

@@ -16,7 +16,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -353,8 +352,9 @@ private fun BrowserScreen(model: BrowserModel) {
             }
             // 全宽纯色层位于网页上方、工具栏下方；沿用遮挡高度，不改变网页尺寸。
             if (!model.fullScreen && !keyboardVisible) model.bottomBackground.color?.let { color ->
-                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .height(with(density) { bottomObscured.toDp() }).background(Color(color)))
+                // Surface 同时阻止触摸穿透，不能点到纯色层下方不可见的网页链接。
+                Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .height(with(density) { bottomObscured.toDp() }), color = Color(color)) {}
             }
             if (!model.fullScreen) {
                     FloatingBrowserToolbar(model, compact, editing, address, {

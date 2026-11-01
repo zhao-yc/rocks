@@ -3,6 +3,7 @@
   if (window !== window.top || !/^https?:$/.test(location.protocol)) return;
   const documentId = crypto.randomUUID();
   let port = null, timer = null, lastRun = -Infinity, lastResult = null;
+  let retryTimer = null, retries = 0;
   let dirty = true, candidates = [], observing = false;
 
   /** 解析浏览器计算后的 sRGB 颜色；不支持的颜色空间保守回退为透明。 */
@@ -72,13 +73,19 @@
     return { documentId, viewport: { left, top, width, height }, bars };
   }
 
-  /** 每个文档和原生端建立独立端口，断开后不通过定时器重连旧文档。 */
+  /** 每个文档建立独立端口；只对启动/提交竞态作四次有界重试，离开文档立即取消。 */
   function connect() {
     if (port || !active()) return;
     try {
       const connected = browser.runtime.connectNative('rocksBottomBackground');
       port = connected;
-      connected.onDisconnect.addListener(() => { if (port === connected) { port = null; lastResult = null; } });
+      connected.onDisconnect.addListener(() => {
+        if (port !== connected) return;
+        port = null; lastResult = null;
+        if (active() && retryTimer === null && retries < 4) {
+          retryTimer = setTimeout(() => { retryTimer = null; schedule(); }, 100 * 2 ** retries++);
+        }
+      });
     } catch { port = null; }
   }
 
@@ -106,12 +113,14 @@
   function activityChanged() {
     lastResult = null; dirty = true;
     if (active()) {
+      retries = 0;
       if (!observing) { observer.observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'open'] }); observing = true; }
       // 留出一次原生焦点/全屏状态提交的时间，避免生命周期回调先后顺序导致误拒绝。
       lastRun = performance.now(); schedule();
     } else {
       observer.disconnect(); observing = false;
       if (timer !== null) { clearTimeout(timer); timer = null; }
+      if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
     }
   }
   window.addEventListener('scroll', schedule, { passive: true, capture: true });
@@ -123,6 +132,7 @@
   window.addEventListener('pagehide', () => {
     observer.disconnect(); observing = false;
     if (timer !== null) { clearTimeout(timer); timer = null; }
+    if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
     const old = port; port = null; old?.disconnect(); lastResult = null;
   });
   activityChanged();

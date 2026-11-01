@@ -15,6 +15,8 @@ Android Gecko 主线在存在可见的贴边固定栏时，将它的纯色延伸
 
 导航、刷新、标签切换、前后台和崩溃使旧端口失效；键盘期间清除报告并停止显示背景；全屏时隐藏背景，恢复后重新检测。扩展失败时保持透明，正常浏览不受影响。底栏背景衔接是对苹果效果的近似实现，不是 Safari 内部算法的复刻。
 
+原生端只在文档位置提交后接受连接，避免旧页面在导航等待期重新上报。扩展针对启动和提交时序只作四次有界重试，后台或离开文档立即取消，不形成持续轮询。Gecko 在合成阶段移动固定底栏而不改变 DOM 矩形，因此原生端在同一表面坐标系内补偿固定元素偏移后再比较底边；纯色层也阻止触摸穿透到已覆盖的网页内容。
+
 ## 验证
 
 脚本回归并入 `node --test scripts/test-gecko-extension.mjs`；原生解析、贴边阈值和文档失效策略并入 `testDebugUnitTest`。完整检查使用 `gradle -p android/gecko-demo :core:test testDebugUnitTest lintDebug assembleDebug`。

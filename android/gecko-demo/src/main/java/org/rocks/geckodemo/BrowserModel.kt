@@ -40,6 +40,7 @@ internal class BrowserTab(val id: Long, val session: GeckoSession, val extension
     var error by mutableStateOf(false)
     var pendingUrl: String? = null
     var documentRevision by mutableLongStateOf(0L)
+    var bottomDocumentCommitted = false
     var desktop by mutableStateOf(false)
     var recordingCamera by mutableStateOf(false)
     var recordingMicrophone by mutableStateOf(false)
@@ -47,6 +48,7 @@ internal class BrowserTab(val id: Long, val session: GeckoSession, val extension
     /** 新文档开始时更新身份，避免权限与查找结果跨文档生效。 */
     fun beginDocument() {
         documentRevision++
+        bottomDocumentCommitted = false
     }
 
     /** 引擎回调和用户导航共用加载状态，进度值不再承担停止/失败判断。 */
@@ -113,7 +115,8 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     private var nextId = 1L
     private var foreground = true
     val bottomBackground = BottomBarBridge(controller) { session ->
-        if (fullScreen) null else pageScope(session)
+        val tab = tabs.firstOrNull { it.session === session }
+        if (fullScreen || tab?.bottomDocumentCommitted != true) null else pageScope(session)
     }
     private var pendingInstall: GeckoResult<WebExtension>? = null
     private var disposed = false
@@ -364,7 +367,11 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                         if (tab.id == selectedId) { sitePermissions.cancel(); finder.close(); files.cancelPrompts(); answerQuestion(false); linkMenu = null }
                     }
                     if (tab.url != url && tab.id == selectedId) resetToolbar()
-                    tab.url = url; save()
+                    tab.url = url
+                    // 位置提交后旧文档已被替换，才允许新文档建立底栏上报端口。
+                    tab.bottomDocumentCommitted = true
+                    bottomBackground.sync()
+                    save()
                 }
             }
             override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) { tab.canGoBack = canGoBack }
@@ -398,6 +405,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 if (tab !in tabs) return
+                if (success) { tab.bottomDocumentCommitted = true; bottomBackground.sync() }
                 if (tab.finishLoad(success) && DemoPolicy.isWebUrl(tab.url)) {
                     history.removeAll { it.url == tab.url }
                     history.add(0, PageRecord(tab.url, tab.title.take(512), System.currentTimeMillis()))
