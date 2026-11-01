@@ -27,6 +27,7 @@ final class DailyBrowserActionsChecks {
     private final String base;
     private BrowserModel model;
     private Activity activity;
+    private int visibleChecks;
 
     /** 只允许显式提供回环夹具的模拟器；本测试会整理测试标签，不应在用户手机上运行。 */
     static void verify(Instrumentation instrumentation, String base) throws ReflectiveOperationException {
@@ -148,10 +149,34 @@ final class DailyBrowserActionsChecks {
 
     /** 模型选中不代表网页已切换，必须找到同一会话占据视口的真实 GeckoView。 */
     private void awaitVisibleSelectedPage() {
-        awaitState("选中会话实际可见", () -> {
-            View root = activity.getWindow().getDecorView();
-            return visibleSession(root, model.getCurrent().getSession(), root.getWidth());
-        });
+        int checkpoint = ++visibleChecks;
+        try {
+            awaitState("第" + checkpoint + "次选中会话实际可见", () -> {
+                View root = activity.getWindow().getDecorView();
+                return visibleSession(root, model.getCurrent().getSession(), root.getWidth());
+            });
+        } catch (AssertionError failure) {
+            AtomicReference<String> geometry = new AtomicReference<>();
+            onMain(() -> geometry.set("窗口宽=" + activity.getWindow().getDecorView().getWidth() + ", " +
+                    viewGeometry(activity.getWindow().getDecorView(), model.getCurrent().getSession())));
+            throw new AssertionError(failure.getMessage() + "；" + geometry.get(), failure);
+        }
+    }
+
+    /** 失败时只报告测试视图几何和会话是否匹配，不输出网址、标题或网页内容。 */
+    private String viewGeometry(View view, GeckoSession selected) {
+        if (view instanceof GeckoView) {
+            Rect visible = new Rect();
+            boolean inWindow = view.getGlobalVisibleRect(visible);
+            return "网页视图[匹配=" + (((GeckoView) view).getSession() == selected) + ",显示=" + view.isShown() +
+                    ",尺寸=" + view.getWidth() + "x" + view.getHeight() + ",窗口内=" + inWindow + ",矩形=" + visible + "]";
+        }
+        StringBuilder children = new StringBuilder();
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) children.append(viewGeometry(group.getChildAt(i), selected));
+        }
+        return children.toString();
     }
 
     /** 排除分页预加载和仅露出边缘的相邻标签，避免模型检查掩盖显示错页。 */

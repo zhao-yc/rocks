@@ -252,7 +252,9 @@ private fun BrowserScreen(model: BrowserModel) {
         // 程序切换立即落在目标页，地址栏拖动仍由原来的跟手动画处理。
         if (draggingTabs) return@LaunchedEffect
         val index = model.tabs.indexOfFirst { it.id == model.selectedId }
-        if (index >= 0 && (pager.currentPage != index || pager.currentPageOffsetFraction != 0f)) pager.scrollToPage(index)
+        // 插入/删除后旧的稳定 key 会在下一次布局继续移动页码，即使当前页码看起来已经相等。
+        // 每次模型选择变化都明确重置分页锚点，不能用布局前的页码跳过同步。
+        if (index >= 0) pager.scrollToPage(index)
     }
     LaunchedEffect(model.notice) {
         model.notice?.let { message ->
