@@ -18,6 +18,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -123,6 +125,7 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
     var showExtensions by remember { mutableStateOf(false) }
     var showTabs by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showTabActions by remember { mutableStateOf(false) }
     var showSitePermissions by remember { mutableStateOf(false) }
     var library by remember { mutableStateOf<LibraryPage?>(null) }
     val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -174,6 +177,9 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
     }
     var editing by remember { mutableStateOf(false) }
     var address by remember { mutableStateOf(TextFieldValue()) }
+    var addressChanged by remember { mutableStateOf(false) }
+    var addressError by remember { mutableStateOf<AddressInputError?>(null) }
+    var editNewTabId by remember { mutableStateOf<Long?>(null) }
     val focusRequester = remember { FocusRequester() }
     val current = model.current
     val pager = rememberPagerState(initialPage = model.tabs.indexOf(current).coerceAtLeast(0), pageCount = { model.tabs.size })
@@ -200,8 +206,9 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val keyboardVisible = WindowInsets.ime.getBottom(density) > 0
+    val navigationBottom = WindowInsets.navigationBars.getBottom(density)
     val touchExploration = rememberTouchExploration()
-    val chromePinned = editing || keyboardVisible || showExtensions || showTabs || showMenu || library != null ||
+    val chromePinned = editing || keyboardVisible || showExtensions || showTabs || showMenu || showTabActions || library != null ||
         model.popup != null || model.question != null || model.linkMenu != null || model.files.offer != null ||
         model.finder.visible || showSitePermissions || model.sitePermissions.nativeRequest != null || current.recordingCamera || current.recordingMicrophone ||
         current.url == DemoPolicy.HOME || touchExploration || density.fontScale > 1.3f
@@ -210,10 +217,30 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
     DisposableEffect(model) { onDispose { model.setToolbarInteraction(false, false) } }
     fun finishEditing() {
         editing = false
+        addressError = null
         focusManager.clearFocus()
         keyboard?.hide()
-        current.session.setFocused(true)
+        model.current.session.setFocused(true)
     }
+    // 点击地址栏时先展示最近访问，只有实际修改文字才启动匹配。
+    fun beginEditing() {
+        val value = model.current.url.takeUnless { it == DemoPolicy.HOME }.orEmpty()
+        model.finder.close()
+        address = TextFieldValue(value, selection = TextRange(0, value.length))
+        addressChanged = false
+        addressError = null
+        editing = true
+        model.current.session.setFocused(false)
+    }
+    // 新标签创建成功才发出编辑请求，选中状态完成重组后再聚焦，避免焦点竞态。
+    fun createTab() {
+        showMenu = false; showTabActions = false; showTabs = false
+        model.newTab(DemoPolicy.HOME)?.let { editNewTabId = it.id }
+    }
+    val suggestions = if (editing) LocalBrowserSearch.suggestions(
+        if (addressChanged) address.text else "",
+        model.tabs.filter { it.extensionBase == null }.sortedBy { if (it.id == model.selectedId) 0 else 1 }
+            .map { SearchableTab(it.id, it.url, it.title) }, model.bookmarks.toList(), model.history.toList()) else emptyList()
     val dragState = rememberDraggableState { delta ->
         // Dispatch synchronously so a queue of per-frame coroutines cannot outlive the gesture.
         // One gesture exposes at most one adjacent page, including on a very long drag.
@@ -248,10 +275,22 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
             if (model.notice == message) model.notice = null
         }
     }
+    LaunchedEffect(model.closeNotice) {
+        model.closeNotice?.let { closed ->
+            val result = snackbar.showSnackbar(context.getString(R.string.tab_closed),
+                actionLabel = context.getString(R.string.undo), duration = SnackbarDuration.Long)
+            if (result == SnackbarResult.ActionPerformed) model.reopenClosedTab(closed.closureId)
+            model.dismissCloseNotice(closed.closureId)
+        }
+    }
     LaunchedEffect(editing) { if (editing) { focusRequester.requestFocus(); keyboard?.show() } }
     LaunchedEffect(model.selectedId) {
         if (editing) finishEditing()
         model.expandToolbar()
+        if (editNewTabId == model.selectedId) {
+            beginEditing()
+            editNewTabId = null
+        }
     }
     LaunchedEffect(model.fullScreen) {
         val window = (context as ComponentActivity).window
@@ -297,25 +336,42 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
                         Text(stringResource(if (model.storageReadOnly) R.string.restore_failed else R.string.save_failed),
                             Modifier.padding(10.dp), style = MaterialTheme.typography.bodySmall)
                     }
-                    if (current.progress < 100 && current.url != DemoPolicy.HOME) {
+                    if (current.loading && current.url != DemoPolicy.HOME) {
                         LinearProgressIndicator(progress = { current.progress / 100f }, modifier = Modifier.fillMaxWidth())
                     }
                 }
                 SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = with(density) { bottomObscured.toDp() }))
                 if (!model.fullScreen) {
-                    FloatingBrowserToolbar(model, compact, editing, address, { address = it }, focusRequester,
+                    if (editing) Box(Modifier.fillMaxSize().clickable(
+                        interactionSource = remember { MutableInteractionSource() }, indication = null,
+                        onClickLabel = stringResource(R.string.cancel), onClick = ::finishEditing))
+                    FloatingBrowserToolbar(model, compact, editing, address, {
+                        if (it.text != address.text) { addressChanged = true; addressError = null }
+                        address = it
+                    }, focusRequester,
                         addressGesture,
                         onAddress = {
                             if (compact) model.expandToolbar()
-                            else {
-                                val value = if (current.url == DemoPolicy.HOME) "" else current.url
-                                address = TextFieldValue(value, selection = TextRange(0, value.length))
-                                editing = true
-                            }
+                            else beginEditing()
                         },
-                        onSubmit = { if (model.navigate(address.text)) finishEditing() }, onCancel = ::finishEditing,
+                        onSubmit = {
+                            val target = LocalBrowserSearch.resolve(address.text, model.searchEngine)
+                            addressError = target.error
+                            if (target.url != null && model.navigate(target.url)) finishEditing()
+                        }, onCancel = ::finishEditing,
+                        addressError = addressError, suggestions = suggestions,
+                        showingRecents = !addressChanged || address.text.isBlank(),
+                        onSuggestion = { item ->
+                            // 结果来自当前快照；已关闭的标签不接收过期切换操作。
+                            if (item.tabId != null && model.tabs.any { it.id == item.tabId }) {
+                                finishEditing(); model.selectTab(item.tabId)
+                            } else if (model.navigate(item.url)) finishEditing()
+                        },
+                        onClearAddress = { address = TextFieldValue(); addressChanged = true; addressError = null },
                         onTabs = { showTabs = true }, onMenu = { showMenu = true },
                         menuExpanded = showMenu, onDismissMenu = { showMenu = false },
+                        tabMenuExpanded = showTabActions, onTabMenu = { showTabActions = true },
+                        onDismissTabMenu = { showTabActions = false }, onNewTab = ::createTab,
                         onExtensions = { showMenu = false; showExtensions = true },
                         onLibrary = { showMenu = false; library = it },
                         onSitePermissions = { showMenu = false; showSitePermissions = true },
@@ -324,8 +380,9 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
                                 type = "text/plain"; putExtra(Intent.EXTRA_TEXT, current.url)
                             }, shareLabel))
                         },
+                        onBarHeight = { barHeight -> bottomObscured = barHeight + navigationBottom +
+                            with(density) { 16.dp.roundToPx() } },
                         modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 600.dp).fillMaxWidth()
-                            .onSizeChanged { bottomObscured = it.height }
                             .navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp))
                 }
             }
@@ -343,7 +400,7 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
             ExtensionManager(model, onOpen = { extension -> showExtensions = false; model.openExtension(extension) })
         }
     }
-    if (showTabs) TabOverview(model) { showTabs = false }
+    if (showTabs) TabOverview(model, onNewTab = ::createTab) { showTabs = false }
     library?.let { page ->
         ModalBottomSheet(onDismissRequest = { library = null }) {
             LibraryPanel(model, page) { library = null }

@@ -33,6 +33,9 @@ internal class BrowserTab(val id: Long, val session: GeckoSession, val extension
     var url by mutableStateOf(DemoPolicy.HOME)
     var title by mutableStateOf("")
     var progress by mutableStateOf(100)
+    var loading by mutableStateOf(false)
+        private set
+    private val loadState = PageLoadState()
     var canGoBack by mutableStateOf(false)
     var canGoForward by mutableStateOf(false)
     var error by mutableStateOf(false)
@@ -50,6 +53,16 @@ internal class BrowserTab(val id: Long, val session: GeckoSession, val extension
         topScrollY = 0f
         contentPainted = false
     }
+
+    /** 引擎回调和用户导航共用加载状态，进度值不再承担停止/失败判断。 */
+    fun startLoad() { loadState.start(); loading = true; error = false; progress = 5 }
+    fun stopLoad() { loadState.stop(); loading = false; error = false; progress = 100 }
+    fun finishLoad(success: Boolean): Boolean {
+        val visited = loadState.finish(success)
+        loading = loadState.loading; error = loadState.error; progress = 100
+        return visited
+    }
+    fun failLoad() { loadState.fail(); loading = false; error = true; progress = 100 }
 }
 
 internal data class ExtensionPopup(val session: GeckoSession, val extensionId: String, val title: String)
@@ -113,6 +126,12 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         private set
     val bookmarks = mutableStateListOf<PageRecord>()
     val history = mutableStateListOf<PageRecord>()
+    private val recentlyClosed = RecentlyClosedTabs()
+    private var automaticHome: AutomaticHomeMarker? = null
+    var latestClosedTab by mutableStateOf<ClosedTabSnapshot?>(null)
+        private set
+    var closeNotice by mutableStateOf<ClosedTabSnapshot?>(null)
+        private set
     var searchEngine by mutableStateOf(SearchEngine.BING)
         private set
     var linkMenu by mutableStateOf<LinkTarget?>(null)
@@ -150,7 +169,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         tab.desktop = !tab.desktop
         tab.session.settings.userAgentMode = if (tab.desktop) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         tab.session.settings.viewportMode = if (tab.desktop) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE
-        resetToolbar(); tab.session.reload()
+        resetToolbar(); tab.startLoad(); tab.session.reload()
     }
     fun resetCurrentSitePermissions() {
         val tab = current
@@ -313,11 +332,17 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    fun newTab(url: String?, select: Boolean = true, extensionBase: String? = null): BrowserTab? {
+    fun newTab(url: String?, select: Boolean = true, extensionBase: String? = null,
+        desktop: Boolean = false, insertionIndex: Int? = null): BrowserTab? {
         if (tabs.size >= DemoPolicy.MAX_TABS) { notify(R.string.tab_limit); return null }
         if (url != null && !DemoPolicy.canLoad(url, extensionBase)) return null
         val session = BrowserGeckoSession()
         val tab = BrowserTab(nextId++, session, extensionBase)
+        tab.desktop = desktop
+        if (desktop) {
+            session.settings.userAgentMode = GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
+            session.settings.viewportMode = GeckoSessionSettings.VIEWPORT_MODE_DESKTOP
+        }
         session.permissionDelegate = if (extensionBase == null) sitePermissions else deniedPermissions
         session.navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
@@ -328,6 +353,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                 return if (allowed) GeckoResult.allow() else GeckoResult.deny()
             }
             override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
+                if (tab !in tabs) return
                 if (url != null) {
                     if (tab.url != url) {
                         tab.documentRevision++
@@ -344,21 +370,23 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                 return newTab(null, extensionBase = tab.extensionBase)?.let { GeckoResult.fromValue(it.session) }
             }
             override fun onLoadError(session: GeckoSession, uri: String?, error: WebRequestError): GeckoResult<String>? {
-                tab.error = true; tab.progress = 100
+                if (tab in tabs) tab.failLoad()
                 return null // Never create certificate exceptions or bypass TLS errors.
             }
         }
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
-                tab.error = false; tab.progress = 5
+                if (tab !in tabs) return
+                tab.startLoad()
                 tab.beginDocument()
                 if (tab.id == selectedId) { sitePermissions.cancel(); finder.close(); answerQuestion(false); resetToolbar() }
             }
-            override fun onProgressChange(session: GeckoSession, progress: Int) { tab.progress = progress }
+            override fun onProgressChange(session: GeckoSession, progress: Int) {
+                if (tab in tabs && tab.loading) tab.progress = progress
+            }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
-                tab.progress = 100
-                if (!success) tab.error = true
-                else if (DemoPolicy.isWebUrl(tab.url)) {
+                if (tab !in tabs) return
+                if (tab.finishLoad(success) && DemoPolicy.isWebUrl(tab.url)) {
                     history.removeAll { it.url == tab.url }
                     history.add(0, PageRecord(tab.url, tab.title.take(512), System.currentTimeMillis()))
                     while (history.size > 500) history.removeAt(history.lastIndex)
@@ -391,7 +419,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
                 if (tab.id == selectedId) { this@BrowserModel.fullScreen = fullScreen; resetToolbar() }
             }
-            override fun onCrash(session: GeckoSession) { tab.error = true; tab.progress = 100 }
+            override fun onCrash(session: GeckoSession) { if (tab in tabs) tab.failLoad() }
             override fun onContextMenu(session: GeckoSession, screenX: Int, screenY: Int, element: GeckoSession.ContentDelegate.ContextElement) {
                 val url = element.linkUri ?: return
                 if (foreground && tab.id == selectedId && DemoPolicy.isWebUrl(url))
@@ -422,7 +450,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             if (url != DemoPolicy.HOME) tab.pendingUrl = url
         }
         extensions.forEach { attachExtension(tab, it) }
-        tabs.add(tab)
+        tabs.add(insertionIndex?.coerceIn(0, tabs.size) ?: tabs.size, tab)
         if (select || tabs.size == 1) selectTab(tab.id) else updateActiveSessions()
         save()
         return tab
@@ -468,38 +496,73 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         save()
     }
 
-    fun closeTab(id: Long) {
+    /** 只有界面明确传入 USER 的单页关闭进入误关记录；引擎关闭默认不记录。 */
+    fun closeTab(id: Long, cause: TabCloseCause = TabCloseCause.PROGRAMMATIC, showUndoNotice: Boolean = true) {
         val index = tabs.indexOfFirst { it.id == id }
         if (index < 0) return
         if (selectedId == id) { sitePermissions.cancel(); finder.close(); answerQuestion(false) }
         files.cancelPrompts(); linkMenu = null
         if (selectedId == id) { closePopup(); fullScreen = false }
         val removed = tabs.removeAt(index)
+        recentlyClosed.record(removed.url, removed.title, index, removed.desktop, cause,
+            extension = removed.extensionBase != null)?.let {
+            latestClosedTab = recentlyClosed.latest
+            if (showUndoNotice) closeNotice = it
+        }
         removed.session.setActive(false)
         removed.session.close()
         overrides.keys.filter { it.second == id }.forEach { overrides.remove(it) }
-        if (tabs.isEmpty()) newTab(DemoPolicy.HOME)
+        if (tabs.isEmpty()) newTab(DemoPolicy.HOME)?.let { automaticHome = AutomaticHomeMarker(it.id, it.documentRevision) }
         else if (selectedId == id) selectTab(tabs[index.coerceAtMost(tabs.lastIndex)].id)
         save()
     }
+
+    /** 恢复前检查上限；创建成功后才消费记录，桌面模式在首次加载前应用。 */
+    fun reopenClosedTab(expectedId: Long? = null): Boolean {
+        val replaceHome = automaticHome?.matches(tabs.size, current.id, current.documentRevision, current.url) == true
+        val entry = recentlyClosed.forRestore(tabs.size, replaceHome, expectedId)
+        if (entry == null) {
+            if (recentlyClosed.latest != null && tabs.size >= DemoPolicy.MAX_TABS) notify(R.string.tab_limit)
+            return false
+        }
+        val homeId = current.id.takeIf { replaceHome }
+        val restored = newTab(entry.url, desktop = entry.desktop, insertionIndex = entry.index) ?: return false
+        restored.title = entry.title
+        if (homeId != null) closeTab(homeId)
+        automaticHome = null
+        recentlyClosed.consume(entry)
+        latestClosedTab = recentlyClosed.latest
+        dismissCloseNotice(entry.closureId)
+        save()
+        return true
+    }
+
+    fun dismissCloseNotice(closureId: Long) { if (closeNotice?.closureId == closureId) closeNotice = null }
 
     fun navigate(input: String): Boolean {
         val url = DemoPolicy.inputUrl(input, searchEngine) ?: run { notify(R.string.unsupported_link); return false }
         sitePermissions.cancel(); finder.close(); current.beginDocument()
         files.cancelPrompts(); answerQuestion(false); linkMenu = null
         current.pendingUrl = null
-        closePopup(); current.url = url; current.error = false; current.session.loadUri(url)
+        closePopup(); current.url = url; current.startLoad(); current.session.loadUri(url)
         save()
         return true
     }
 
-    fun home() { sitePermissions.cancel(); finder.close(); current.beginDocument(); files.cancelPrompts(); current.pendingUrl = null; current.url = DemoPolicy.HOME; current.error = false; current.session.loadUri(DemoPolicy.HOME); save() }
+    fun home() { sitePermissions.cancel(); finder.close(); current.beginDocument(); files.cancelPrompts(); current.pendingUrl = null; current.url = DemoPolicy.HOME; current.stopLoad(); current.session.loadUri(DemoPolicy.HOME); save() }
     fun back() { if (fullScreen) current.session.exitFullScreen() else if (current.canGoBack) current.session.goBack() }
     fun reload() {
         sitePermissions.cancel(); finder.close(); current.beginDocument(); answerQuestion(false)
-        current.error = false
+        current.startLoad()
         if (!current.session.isOpen) { current.session.open(runtime); current.session.loadUri(current.url) }
         else current.session.reload()
+    }
+
+    /** 主动停止只取消当前请求，不清除历史、不把中断渲染为网络或证书失败。 */
+    fun stopLoading() {
+        if (!current.loading) return
+        current.stopLoad()
+        current.session.stop()
     }
 
     fun setForeground(value: Boolean) {
@@ -513,7 +576,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         val selected = tabs.indexOfFirst { it.id == selectedId }
         tabs.forEachIndexed { index, it ->
             if (!restoring && foreground && kotlin.math.abs(index - selected) <= 1) {
-                it.pendingUrl?.let { target -> it.pendingUrl = null; it.session.loadUri(target) }
+                it.pendingUrl?.let { target -> it.pendingUrl = null; it.startLoad(); it.session.loadUri(target) }
             }
             // Adjacent pages must paint before a bottom-bar drag exposes their surfaces.
             it.session.setActive(foreground && kotlin.math.abs(index - selected) <= 1)
@@ -549,13 +612,10 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     }
 
     fun removeBookmark(url: String) { bookmarks.removeAll { it.url == url }; save() }
-    fun clearHistory() {
-        question = PermissionQuestion(text(R.string.clear_history), text(R.string.clear_history_note)) { allow ->
-            if (allow) { history.clear(); save() }
-        }
-    }
+    /** 历史面板完成明确确认后调用；筛选条件不会改变清空范围。 */
+    fun clearHistory() { history.clear(); save() }
     fun setSearch(engine: SearchEngine) { searchEngine = engine; save() }
-    fun closeOtherTabs() { tabs.filter { it.id != selectedId }.toList().forEach { closeTab(it.id) } }
+    fun closeOtherTabs() { tabs.filter { it.id != selectedId }.toList().forEach { closeTab(it.id, TabCloseCause.BULK) } }
     fun openLink(background: Boolean) {
         val target = linkMenu ?: return
         linkMenu = null

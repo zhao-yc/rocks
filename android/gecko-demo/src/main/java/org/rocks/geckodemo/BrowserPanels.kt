@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -16,6 +17,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -30,6 +34,9 @@ internal enum class LibraryPage(val label: Int) {
 @Composable
 internal fun LibraryPanel(model: BrowserModel, initial: LibraryPage, dismiss: () -> Unit) {
     var page by remember(initial) { mutableStateOf(initial) }
+    var bookmarkQuery by remember { mutableStateOf("") }
+    var historyQuery by remember { mutableStateOf("") }
+    var clearingHistory by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().heightIn(max = 650.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             LibraryPage.entries.forEach { item ->
@@ -79,12 +86,24 @@ internal fun LibraryPanel(model: BrowserModel, initial: LibraryPage, dismiss: ()
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(page.label), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                 if (page == LibraryPage.HISTORY && model.history.isNotEmpty())
-                    TextButton(onClick = model::clearHistory) { Text(stringResource(R.string.clear_history)) }
+                    TextButton(onClick = { clearingHistory = true }) { Text(stringResource(R.string.clear_history)) }
             }
             val entries = if (page == LibraryPage.BOOKMARKS) model.bookmarks.toList() else model.history.toList()
+            val query = if (page == LibraryPage.BOOKMARKS) bookmarkQuery else historyQuery
+            val filtered = LocalBrowserSearch.filter(entries, query)
+            OutlinedTextField(value = query, onValueChange = {
+                if (page == LibraryPage.BOOKMARKS) bookmarkQuery = it else historyQuery = it
+            }, singleLine = true, label = { Text(stringResource(if (page == LibraryPage.BOOKMARKS)
+                R.string.search_bookmarks else R.string.search_history)) },
+                leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) IconButton(onClick = {
+                        if (page == LibraryPage.BOOKMARKS) bookmarkQuery = "" else historyQuery = ""
+                    }) { Icon(Icons.Outlined.Close, stringResource(R.string.clear_search)) }
+                }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp).padding(bottom = 24.dp)) {
-                if (entries.isEmpty()) item { EmptyLibrary() }
-                items(entries, key = { it.url }) { record ->
+                if (filtered.isEmpty()) item { EmptyLibrary(noMatches = entries.isNotEmpty()) }
+                items(filtered, key = { it.url }) { record ->
                     ListItem(headlineContent = { Text(record.title.ifBlank { record.url }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         supportingContent = { Text(record.url, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         trailingContent = {
@@ -96,31 +115,62 @@ internal fun LibraryPanel(model: BrowserModel, initial: LibraryPage, dismiss: ()
             }
         }
     }
+    if (clearingHistory) AlertDialog(onDismissRequest = { clearingHistory = false },
+        title = { Text(stringResource(R.string.clear_history)) },
+        text = { Text(stringResource(R.string.clear_history_note)) },
+        confirmButton = { TextButton(onClick = { model.clearHistory(); clearingHistory = false }) {
+            Text(stringResource(R.string.clear_all_history))
+        } },
+        dismissButton = { TextButton(onClick = { clearingHistory = false }) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable
-private fun EmptyLibrary() { Text(stringResource(R.string.library_empty), Modifier.fillMaxWidth().padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+private fun EmptyLibrary(noMatches: Boolean = false) {
+    Text(stringResource(if (noMatches) R.string.library_no_matches else R.string.library_empty),
+        Modifier.fillMaxWidth().padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
 
 @Composable
-internal fun TabOverview(model: BrowserModel, dismiss: () -> Unit) {
+internal fun TabOverview(model: BrowserModel, onNewTab: () -> Unit, dismiss: () -> Unit) {
+    val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = model.tabs.indexOfFirst { it.id == model.selectedId }.coerceAtLeast(0))
+    var closingOtherTabsFor by remember { mutableStateOf<Long?>(null) }
+    val selectedLabel = stringResource(R.string.current_tab)
     Dialog(onDismissRequest = dismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.tabs), Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
-                    TextButton(onClick = { model.closeOtherTabs() }) { Text(stringResource(R.string.close_others)) }
-                    IconButton(onClick = dismiss) { Icon(Icons.Outlined.Close, stringResource(R.string.close_panel)) }
+                    TextButton(onClick = { closingOtherTabsFor = model.selectedId }, enabled = model.tabs.size > 1) {
+                        Text(stringResource(R.string.close_others))
+                    }
+                    IconButton(onClick = dismiss) { Icon(Icons.Outlined.Close, stringResource(R.string.close_tabs)) }
                 }
-                LazyVerticalGrid(columns = GridCells.Adaptive(150.dp), modifier = Modifier.weight(1f),
+                // 撤销入口位于总览自己的窗口内，避免主页面的 Snackbar 被全屏 Dialog 遮挡。
+                model.latestClosedTab?.let { closed ->
+                    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.last_closed_tab, closed.title.ifBlank { displayAddress(closed.url) }),
+                            Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { model.reopenClosedTab(closed.closureId) }) { Text(stringResource(R.string.undo_close)) }
+                    }
+                }
+                LazyVerticalGrid(columns = GridCells.Adaptive(150.dp), state = gridState, modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(model.tabs.toList(), key = { it.id }) { tab ->
                         Card(onClick = { model.selectTab(tab.id); dismiss() },
+                            modifier = Modifier.semantics {
+                                selected = model.selectedId == tab.id
+                                if (model.selectedId == tab.id) stateDescription = selectedLabel
+                            },
                             colors = CardDefaults.cardColors(containerColor = if (model.selectedId == tab.id)
                                 MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer)) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Outlined.Language, null, Modifier.padding(12.dp).size(20.dp))
                                 Spacer(Modifier.weight(1f))
-                                IconButton(onClick = { model.closeTab(tab.id) }) { Icon(Icons.Outlined.Close, stringResource(R.string.close_tab)) }
+                                IconButton(onClick = { model.closeTab(tab.id, TabCloseCause.USER, showUndoNotice = false) }) {
+                                    Icon(Icons.Outlined.Close, stringResource(R.string.close_named_tab,
+                                        tab.title.ifBlank { if (tab.url == DemoPolicy.HOME) stringResource(R.string.home) else displayAddress(tab.url) }))
+                                }
                             }
                             Column(Modifier.height(95.dp).padding(horizontal = 14.dp)) {
                                 Text(tab.title.ifBlank { if (tab.url == DemoPolicy.HOME) stringResource(R.string.home) else tab.url }, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
@@ -130,10 +180,22 @@ internal fun TabOverview(model: BrowserModel, dismiss: () -> Unit) {
                         }
                     }
                 }
-                Button(onClick = { model.newTab(DemoPolicy.HOME); dismiss() }, Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                if (model.tabs.size >= DemoPolicy.MAX_TABS) Text(stringResource(R.string.tab_limit),
+                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                Button(onClick = onNewTab, enabled = model.tabs.size < DemoPolicy.MAX_TABS,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
                     Icon(Icons.Outlined.Add, null); Text(stringResource(R.string.new_tab))
                 }
             }
         }
     }
+    if (closingOtherTabsFor != null) AlertDialog(onDismissRequest = { closingOtherTabsFor = null },
+        title = { Text(stringResource(R.string.close_others_title, (model.tabs.size - 1).coerceAtLeast(0))) },
+        text = { Text(stringResource(R.string.close_others_note)) },
+        confirmButton = { TextButton(onClick = {
+            // 确认期间若当前标签被引擎切换，旧确认不作用于新的选中页。
+            if (model.selectedId == closingOtherTabsFor) model.closeOtherTabs()
+            closingOtherTabsFor = null
+        }) { Text(stringResource(R.string.close_others)) } },
+        dismissButton = { TextButton(onClick = { closingOtherTabsFor = null }) { Text(stringResource(R.string.cancel)) } })
 }
