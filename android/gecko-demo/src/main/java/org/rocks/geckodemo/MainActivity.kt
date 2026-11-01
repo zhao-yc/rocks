@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
@@ -54,6 +55,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 
@@ -165,6 +167,7 @@ private fun BrowserScreen(model: BrowserModel) {
         }
     }
     var editing by remember { mutableStateOf(false) }
+    var editorSawKeyboard by remember { mutableStateOf(false) }
     var address by remember { mutableStateOf(TextFieldValue()) }
     var addressChanged by remember { mutableStateOf(false) }
     var addressError by remember { mutableStateOf<AddressInputError?>(null) }
@@ -183,6 +186,7 @@ private fun BrowserScreen(model: BrowserModel) {
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val keyboardVisible = WindowInsets.ime.getBottom(density) > 0
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
     val navigationBottom = WindowInsets.navigationBars.getBottom(density)
     val bottomObscured = toolbarHeight + navigationBottom + with(density) { 16.dp.roundToPx() }
     val touchExploration = rememberTouchExploration()
@@ -265,6 +269,15 @@ private fun BrowserScreen(model: BrowserModel) {
         }
     }
     LaunchedEffect(editing) { if (editing) { focusRequester.requestFocus(); keyboard?.show() } }
+    LaunchedEffect(editing, keyboardVisible, windowFocused) {
+        // 系统返回先由输入法消费时，等收起动画结束后一起退出编辑。
+        // 窗口失焦时解除观察，切换输入法或临时离开应用不会因此丢弃草稿。
+        when {
+            !editing || !windowFocused -> editorSawKeyboard = false
+            keyboardVisible -> editorSawKeyboard = true
+            editorSawKeyboard -> { delay(150); finishEditing() }
+        }
+    }
     LaunchedEffect(model.selectedId) {
         if (editing) finishEditing()
         model.expandToolbar()

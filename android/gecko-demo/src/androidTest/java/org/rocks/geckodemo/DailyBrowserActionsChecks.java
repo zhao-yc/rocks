@@ -109,6 +109,13 @@ final class DailyBrowserActionsChecks {
         awaitLabel(instrumentation.getTargetContext().getString(R.string.address_unsupported_scheme));
         check("javascript:alert(1)".contentEquals(editable().getText()), "非法提交丢失了地址草稿");
         clickLabel(instrumentation.getTargetContext().getString(R.string.cancel));
+        clickLabel("127.0.0.1");
+        awaitEditable();
+        if (Build.VERSION.SDK_INT >= 30) awaitState("地址软键盘显示", () ->
+                activity.getWindow().getDecorView().getRootWindowInsets() != null &&
+                activity.getWindow().getDecorView().getRootWindowInsets().isVisible(android.view.WindowInsets.Type.ime()));
+        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
+        awaitNoEditor();
         clickLabel(instrumentation.getTargetContext().getString(R.string.more));
         final int[] before = {0};
         onMain(() -> before[0] = model.getTabs().size());
