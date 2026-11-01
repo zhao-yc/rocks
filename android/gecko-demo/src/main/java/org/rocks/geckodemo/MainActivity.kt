@@ -243,6 +243,8 @@ private fun BrowserScreen(model: BrowserModel) {
         .draggable(dragState, Orientation.Horizontal, enabled = model.tabs.size > 1 && !editing,
             onDragStarted = { gestureStart = pager.settledPage; draggingTabs = true },
             onDragStopped = { velocity ->
+                // 打开地址面板会移除拖动节点；取消回调不能按旧的起点误切标签。
+                if (!draggingTabs || hub.visible) { draggingTabs = false; return@draggable }
                 val offset = pager.currentPage + pager.currentPageOffsetFraction - gestureStart
                 val target = DemoPolicy.swipeTarget(gestureStart, offset, velocity, model.tabs.size)
                 scope.launch {

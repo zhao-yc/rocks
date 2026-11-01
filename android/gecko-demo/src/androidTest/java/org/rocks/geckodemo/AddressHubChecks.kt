@@ -12,6 +12,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.InputDevice
 import android.view.View
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
@@ -64,13 +66,22 @@ internal object AddressHubChecks {
                 if (iconsOnly) { iconChecks(); return }
                 main {
                     model.closeOtherTabs(); model.clearClosedTabs()
+                    check(model.newTab(base + "one") != null) { "无法准备非首个标签的触摸检查" }
                     model.bookmarks.clear()
                     model.bookmarks.add(PageRecord(base + "one", "面板收藏", System.currentTimeMillis()))
                 }
+                await("非首个网页实际可见") {
+                    val view = gecko(activity.window.decorView, model.current.session)
+                    val rect = android.graphics.Rect()
+                    !model.current.loading && view != null && view.getGlobalVisibleRect(rect) &&
+                        rect.width() >= activity.window.decorView.width * .8f
+                }
+                val selectedBefore = main { model.selectedId }
                 val original = main { gecko(activity.window.decorView, model.current.session) ?: error("缺少当前网页") }
                 val dimensions = main { original.width to original.height }
-                click("127.0.0.1")
+                touch("127.0.0.1")
                 await("首次键盘与面板") { model.addressHub.visible && ime() }
+                main { check(model.selectedId == selectedBefore) { "触摸地址栏意外切换了标签" } }
                 awaitSelectedAddress()
                 main { check(gecko(activity.window.decorView, model.current.session) === original &&
                     (original.width to original.height) == dimensions) { "面板或键盘改变了原网页视图" } }
@@ -310,6 +321,20 @@ internal object AddressHubChecks {
         }
 
         private fun editable() = node { it.packageName?.toString() == inst.targetContext.packageName && it.isEditable && it.isFocused }
+
+        /** 用真实触摸覆盖地址点击与横向拖动取消的竞争，不能只依靠语义动作。 */
+        private fun touch(label: String) {
+            val target = node { it.text?.toString() == label || it.contentDescription?.toString() == label }
+            val bounds = android.graphics.Rect()
+            target.getBoundsInScreen(bounds)
+            check(!bounds.isEmpty) { "触摸目标没有实际尺寸" }
+            val downAt = SystemClock.uptimeMillis()
+            val down = MotionEvent.obtain(downAt, downAt, MotionEvent.ACTION_DOWN, bounds.exactCenterX(), bounds.exactCenterY(), 0)
+            val up = MotionEvent.obtain(downAt, downAt + 80, MotionEvent.ACTION_UP, bounds.exactCenterX(), bounds.exactCenterY(), 0)
+            down.source = InputDevice.SOURCE_TOUCHSCREEN; up.source = InputDevice.SOURCE_TOUCHSCREEN
+            try { inst.sendPointerSync(down); SystemClock.sleep(80); inst.sendPointerSync(up) }
+            finally { down.recycle(); up.recycle() }
+        }
 
         /** 输入法可见不等于无障碍选区事件已经送达，等待实际原生选区稳定而不是固定延迟。 */
         private fun awaitSelectedAddress() {
