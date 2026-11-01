@@ -10,6 +10,12 @@ import java.time.ZoneId
 
 internal enum class AddressHubPage { OVERVIEW, BOOKMARKS, HISTORY }
 internal enum class HubInput { NONE, ADDRESS, BOOKMARKS, HISTORY }
+internal val AddressInputError.label: Int get() = when (this) {
+    AddressInputError.EMPTY -> R.string.address_empty
+    AddressInputError.INVALID_INPUT -> R.string.address_invalid
+    AddressInputError.INVALID_URL -> R.string.address_invalid_url
+    AddressInputError.UNSUPPORTED_SCHEME -> R.string.address_unsupported_scheme
+}
 internal data class HubScrollPosition(val index: Int = 0, val offset: Int = 0)
 
 /** 面板临时状态由 ViewModel 持有，旋转不会重置草稿，也不写入跨端浏览数据。 */

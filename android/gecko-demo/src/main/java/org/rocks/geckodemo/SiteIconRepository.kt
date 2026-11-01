@@ -126,9 +126,12 @@ internal class SiteIconRepository(runtime: GeckoRuntime, cacheDir: File, private
     }
 
     /** GeckoResult 与协程取消相连，面板销毁、超时和 ViewModel 结束均能释放请求。 */
-    private suspend fun <T> await(result: GeckoResult<T>): T = suspendCancellableCoroutine { continuation ->
-        result.accept({ value -> continuation.resume(value) }, { failure ->
-            if (continuation.isActive) continuation.resumeWithException(failure)
+    private suspend fun <T : Any> await(result: GeckoResult<T>): T = suspendCancellableCoroutine { continuation ->
+        result.accept({ value ->
+            if (value != null) continuation.resume(value)
+            else if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Gecko 未返回图标资源"))
+        }, { failure ->
+            if (continuation.isActive) continuation.resumeWithException(failure ?: IllegalStateException("Gecko 图标处理失败"))
         })
         continuation.invokeOnCancellation { result.cancel() }
     }
