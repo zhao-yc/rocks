@@ -103,6 +103,7 @@ private fun BrowserScreen(model: BrowserModel) {
         return
     }
     val context = LocalContext.current
+    val appName = stringResource(R.string.app_name)
     val shareLabel = stringResource(R.string.share)
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -327,7 +328,7 @@ private fun BrowserScreen(model: BrowserModel) {
                 TextButton(onClick = { model.openLink(false) }) { Text(stringResource(R.string.open_new_tab)) }
                 TextButton(onClick = { model.openLink(true) }) { Text(stringResource(R.string.open_background)) }
                 TextButton(onClick = {
-                    (context.getSystemService(ClipboardManager::class.java)).setPrimaryClip(ClipData.newPlainText(context.getString(R.string.app_name), target.url))
+                    (context.getSystemService(ClipboardManager::class.java)).setPrimaryClip(ClipData.newPlainText(appName, target.url))
                     model.linkMenu = null; model.notify(R.string.link_copied)
                 }) { Text(stringResource(R.string.copy_link)) }
                 TextButton(onClick = {

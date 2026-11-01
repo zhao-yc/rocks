@@ -20,7 +20,7 @@ GeckoView can release a null display before attachment or after detachment, even
 
 For an x86_64 emulator, explicitly select `build_emulator_apk` when manually running the Gecko workflow. After archiving the unchanged ARM64 phone APK, CI temporarily changes only the ABI filter and creates a separately named, signed `rocks-gecko-emulator-apk` artifact from the same runtime source. It downloads no system image and is never passed to the public release workflow. This avoids depending on ARM translation for Gecko's native engine/JIT during emulator visual checks. All adb commands should specify the intended device serial.
 
-## 0.4.3 Safari-style top safe area
+## Previous 0.4.3–0.4.6 top safe area
 
 Normal browsing initially positions a complete-height GeckoView below the Android status-bar/cutout safe area, including pages that declare `viewport-fit=cover`. Version 0.4.6 moves that actual view to the window's top as the document scrolls, using Gecko's CSS scroll position and zoom to calculate screen pixels. The viewport height stays constant while scrolling, and returning to the document top restores the initial offset. Screen-origin and bottom-occlusion hints account for the translation so touch coordinates and fixed footers remain aligned. The host still consumes horizontal cutout insets; native home, progress and error content keep their own top safety. Website fullscreen removes the offset and overlay. The bottom floating toolbar remains unchanged.
 
