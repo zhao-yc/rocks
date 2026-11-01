@@ -104,13 +104,30 @@ class LocalBrowserActionsTest {
     }
 
     @Test fun onlyTheExactUntouchedAutomaticHomeCanBeReplaced() {
-        val home = AutomaticHomeMarker(9, 3)
-        assertTrue(home.matches(1, 9, 3, DemoPolicy.HOME))
-        assertFalse(home.matches(2, 9, 3, DemoPolicy.HOME))
-        assertFalse(home.matches(1, 10, 3, DemoPolicy.HOME))
-        assertFalse(home.matches(1, 9, 4, DemoPolicy.HOME))
-        assertFalse(home.matches(1, 9, 3, "https://example.org"))
+        val home = AutomaticHomeMarker(9)
+        assertTrue(home.matches(1, 9, DemoPolicy.HOME))
+        assertFalse(home.matches(2, 9, DemoPolicy.HOME))
+        assertFalse(home.matches(1, 10, DemoPolicy.HOME))
+        assertFalse(home.matches(1, 9, "https://example.org"))
         assertNull(RecentlyClosedTabs().latest)
+    }
+
+    @Test fun blankEngineInitializationKeepsTheAutomaticHomeReplaceableButNavigationDoesNot() {
+        val home = AutomaticHomeMarker(9)
+        home.navigationRequested(9, DemoPolicy.HOME)
+        home.navigationRequested(10, "https://example.org/other")
+        assertTrue(home.matches(1, 9, DemoPolicy.HOME))
+        home.navigationRequested(9, "https://example.org/visited")
+        home.navigationRequested(9, DemoPolicy.HOME)
+        assertFalse(home.matches(1, 9, DemoPolicy.HOME))
+    }
+
+    @Test fun explicitlyUsingHomeControlsPreventsReplacingThatTab() {
+        val home = AutomaticHomeMarker(9)
+        home.usedByUser(10)
+        assertTrue(home.matches(1, 9, DemoPolicy.HOME))
+        home.usedByUser(9)
+        assertFalse(home.matches(1, 9, DemoPolicy.HOME))
     }
 
     @Test fun stoppingThenReceivingAnUnsuccessfulCompletionIsNotAVisitOrError() {

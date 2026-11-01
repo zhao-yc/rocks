@@ -349,12 +349,14 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                 if (request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW &&
                     (!request.hasUserGesture || tab.id != selectedId)) return GeckoResult.deny()
                 val allowed = DemoPolicy.canLoad(request.uri, tab.extensionBase)
+                if (allowed) automaticHome?.navigationRequested(tab.id, request.uri)
                 if (!allowed && request.hasUserGesture && tab.id == selectedId) notify(R.string.unsupported_link)
                 return if (allowed) GeckoResult.allow() else GeckoResult.deny()
             }
             override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
                 if (tab !in tabs) return
                 if (url != null) {
+                    automaticHome?.navigationRequested(tab.id, url)
                     if (tab.url != url) {
                         tab.documentRevision++
                         if (tab.id == selectedId) { sitePermissions.cancel(); finder.close(); files.cancelPrompts(); answerQuestion(false); linkMenu = null }
@@ -377,6 +379,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 if (tab !in tabs) return
+                automaticHome?.navigationRequested(tab.id, url)
                 tab.startLoad()
                 tab.beginDocument()
                 if (tab.id == selectedId) { sitePermissions.cancel(); finder.close(); answerQuestion(false); resetToolbar() }
@@ -512,14 +515,14 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         removed.session.setActive(false)
         removed.session.close()
         overrides.keys.filter { it.second == id }.forEach { overrides.remove(it) }
-        if (tabs.isEmpty()) newTab(DemoPolicy.HOME)?.let { automaticHome = AutomaticHomeMarker(it.id, it.documentRevision) }
+        if (tabs.isEmpty()) newTab(DemoPolicy.HOME)?.let { automaticHome = AutomaticHomeMarker(it.id) }
         else if (selectedId == id) selectTab(tabs[index.coerceAtMost(tabs.lastIndex)].id)
         save()
     }
 
     /** 恢复前检查上限；创建成功后才消费记录，桌面模式在首次加载前应用。 */
     fun reopenClosedTab(expectedId: Long? = null): Boolean {
-        val replaceHome = automaticHome?.matches(tabs.size, current.id, current.documentRevision, current.url) == true
+        val replaceHome = automaticHome?.matches(tabs.size, current.id, current.url) == true
         val entry = recentlyClosed.forRestore(tabs.size, replaceHome, expectedId)
         if (entry == null) {
             if (recentlyClosed.latest != null && tabs.size >= DemoPolicy.MAX_TABS) notify(R.string.tab_limit)
@@ -541,6 +544,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
 
     fun navigate(input: String): Boolean {
         val url = DemoPolicy.inputUrl(input, searchEngine) ?: run { notify(R.string.unsupported_link); return false }
+        automaticHome?.usedByUser(current.id)
         sitePermissions.cancel(); finder.close(); current.beginDocument()
         files.cancelPrompts(); answerQuestion(false); linkMenu = null
         current.pendingUrl = null
@@ -549,7 +553,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         return true
     }
 
-    fun home() { sitePermissions.cancel(); finder.close(); current.beginDocument(); files.cancelPrompts(); current.pendingUrl = null; current.url = DemoPolicy.HOME; current.stopLoad(); current.session.loadUri(DemoPolicy.HOME); save() }
+    fun home() { automaticHome?.usedByUser(current.id); sitePermissions.cancel(); finder.close(); current.beginDocument(); files.cancelPrompts(); current.pendingUrl = null; current.url = DemoPolicy.HOME; current.stopLoad(); current.session.loadUri(DemoPolicy.HOME); save() }
     fun back() { if (fullScreen) current.session.exitFullScreen() else if (current.canGoBack) current.session.goBack() }
     fun reload() {
         sitePermissions.cancel(); finder.close(); current.beginDocument(); answerQuestion(false)

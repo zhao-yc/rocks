@@ -70,10 +70,20 @@ internal enum class TabCloseCause { USER, PROGRAMMATIC, BULK }
 internal data class ClosedTabSnapshot(
     val closureId: Long, val url: String, val title: String, val index: Int, val desktop: Boolean,
 )
-internal data class AutomaticHomeMarker(val tabId: Long, val revision: Long) {
-    /** 只有关闭最后一页自动生成、且尚未导航的唯一首页允许被恢复操作替换。 */
-    fun matches(tabCount: Int, id: Long, documentRevision: Long, url: String): Boolean =
-        tabCount == 1 && id == tabId && documentRevision == revision && url == DemoPolicy.HOME
+internal class AutomaticHomeMarker(private val tabId: Long) {
+    private var used = false
+
+    /** 空白会话的初始化绘制不算导航；离开过首页后即使返回也不能替换。 */
+    fun navigationRequested(id: Long, url: String) {
+        if (id == tabId && url != DemoPolicy.HOME) used = true
+    }
+
+    /** 用户主动使用“起始页”等导航控制后，不再将它视作自动占位页。 */
+    fun usedByUser(id: Long) { if (id == tabId) used = true }
+
+    /** 只有关闭最后一页自动生成、且尚未使用的唯一首页允许被恢复操作替换。 */
+    fun matches(tabCount: Int, id: Long, url: String): Boolean =
+        !used && tabCount == 1 && id == tabId && url == DemoPolicy.HOME
 }
 
 /** 最近关闭仅保留网址快照，不持有引擎会话、网页内容或设备授权。 */
