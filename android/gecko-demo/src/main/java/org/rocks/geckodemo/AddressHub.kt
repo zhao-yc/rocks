@@ -32,6 +32,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -54,10 +55,13 @@ internal fun AddressHub(model: BrowserModel, suggestions: List<AddressSuggestion
     val searchFocus = remember { FocusRequester() }
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
     val panelTitle = stringResource(R.string.address_hub)
     var clearClosed by remember { mutableStateOf(false) }
     var clearHistory by remember { mutableStateOf(false) }
-    LaunchedEffect(state.focusVersion) {
+    LaunchedEffect(state.focusVersion, windowFocused) {
+        // 旋转后的第一次组合可能早于新窗口获得焦点，此时请求键盘会被 Android 忽略。
+        if (!windowFocused) return@LaunchedEffect
         when (state.input) {
             HubInput.NONE -> { focus.clearFocus(); keyboard?.hide() }
             HubInput.ADDRESS -> { addressFocus.requestFocus(); keyboard?.show() }
