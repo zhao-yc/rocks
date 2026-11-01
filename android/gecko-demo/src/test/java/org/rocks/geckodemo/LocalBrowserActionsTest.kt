@@ -59,6 +59,7 @@ class LocalBrowserActionsTest {
         assertEquals(AddressInputError.UNSUPPORTED_SCHEME, LocalBrowserSearch.resolve("javascript:alert(1)", SearchEngine.BING).error)
         assertEquals(AddressInputError.INVALID_INPUT, LocalBrowserSearch.resolve("a".repeat(8193), SearchEngine.BING).error)
         assertEquals(AddressInputError.INVALID_INPUT, LocalBrowserSearch.resolve("a\u0000b", SearchEngine.BING).error)
+        assertEquals(AddressInputError.INVALID_INPUT, LocalBrowserSearch.resolve("中文".repeat(1000), SearchEngine.BING).error)
         assertEquals("https://example.org", LocalBrowserSearch.resolve("example.org", SearchEngine.BING).url)
         assertTrue(LocalBrowserSearch.resolve("浏览器", SearchEngine.BAIDU).url!!.startsWith(SearchEngine.BAIDU.prefix))
     }

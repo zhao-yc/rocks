@@ -19,6 +19,9 @@ internal object LocalBrowserSearch {
     /** 将核心解析器的诊断映射为可翻译的界面状态，网址规则仍只由核心解析器维护。 */
     fun resolve(input: String, engine: SearchEngine): AddressInputResult {
         val result = AddressResolver.resolve(input, engine)
+        // 中文搜索词编码后也可能超过核心网址上限；此时直接给出输入诊断。
+        if (result.url != null && !AddressResolver.isWebUrl(result.url))
+            return AddressInputResult(null, AddressInputError.INVALID_INPUT)
         val error = when (result.error) {
             null -> null
             "请输入网址或搜索词" -> AddressInputError.EMPTY

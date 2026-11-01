@@ -68,13 +68,14 @@ internal fun FloatingBrowserToolbar(
     val editLabel = stringResource(R.string.edit_address)
     val stateLabel = stringResource(if (compact) R.string.toolbar_compact else R.string.toolbar_expanded)
     BoxWithConstraints(modifier, contentAlignment = Alignment.BottomCenter) {
+        val availableHeight = maxHeight
         val compactWidth = (host.length * 7 + 48).coerceIn(144, 220).dp.coerceAtMost(maxWidth)
         val width by animateDpAsState(if (compact) compactWidth else maxWidth,
             spring(stiffness = 500f), label = "floating-toolbar-width")
         Column(Modifier.width(width), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // 建议独立于底栏遮挡高度；键盘或横屏压缩空间时优先保留输入框。
-        if (editing && maxHeight > 160.dp) AddressSuggestions(suggestions, showingRecents, onSuggestion,
-            Modifier.fillMaxWidth().heightIn(max = (maxHeight - 128.dp).coerceIn(0.dp, 280.dp)))
+        if (editing && availableHeight > 160.dp) AddressSuggestions(suggestions, showingRecents, onSuggestion,
+            Modifier.fillMaxWidth().heightIn(max = (availableHeight - 128.dp).coerceIn(0.dp, 280.dp)))
         Surface(modifier = Modifier.fillMaxWidth().onSizeChanged { onBarHeight(it.height) }
             .animateContentSize(spring(stiffness = 500f))
             .semantics { stateDescription = stateLabel },
