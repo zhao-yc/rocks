@@ -60,6 +60,7 @@ internal object AddressHubChecks {
                 main { check(gecko(activity.window.decorView, model.current.session) === original &&
                     (original.width to original.height) == dimensions) { "面板或键盘改变了原网页视图" } }
                 setText("面板草稿")
+                await("地址草稿实际同步") { model.addressHub.address.text == "面板草稿" }
                 val selection = Bundle().apply {
                     putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 1)
                     putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, 3)
@@ -68,7 +69,12 @@ internal object AddressHubChecks {
                 await("原生光标同步") { model.addressHub.address.selection.start == 1 && model.addressHub.address.selection.end == 3 }
                 click(inst.targetContext.getString(R.string.bookmarks))
                 await("主动分类收键盘") { model.addressHub.visible && model.addressHub.page == AddressHubPage.BOOKMARKS && !ime() }
-                main { check(model.addressHub.address.text == "面板草稿" && model.addressHub.address.selection.start == 1) { "切分类丢失草稿或光标" } }
+                main {
+                    val draft = model.addressHub.address
+                    check(draft.text == "面板草稿" && draft.selection.start == 1 && draft.selection.end == 3) {
+                        "切分类后草稿一致=${draft.text == "面板草稿"}，长度=${draft.text.length}，选区=${draft.selection}，输入=${model.addressHub.input}"
+                    }
+                }
                 click(inst.targetContext.getString(R.string.search_bookmarks))
                 setText("面板")
                 await("书签焦点独立") { model.addressHub.bookmarkQuery == "面板" && model.addressHub.input == HubInput.BOOKMARKS && ime() }
