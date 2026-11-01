@@ -1,9 +1,11 @@
 package org.rocks.geckodemo
 
 import android.app.Activity
+import android.app.Application
 import android.app.Instrumentation
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
@@ -34,12 +36,24 @@ internal object AddressHubChecks {
     }
 
     private class Checks(val inst: Instrumentation, val base: String) {
-        lateinit var activity: Activity
+        @Volatile lateinit var activity: Activity
         lateinit var model: BrowserModel
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        // 持续跟踪真正恢复的窗口；ActivityMonitor 的单次通知可能早于配置重建完成。
+        val windows = object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityResumed(value: Activity) { if (value is MainActivity) activity = value }
+            override fun onActivityCreated(value: Activity, state: Bundle?) { }
+            override fun onActivityStarted(value: Activity) { }
+            override fun onActivityPaused(value: Activity) { }
+            override fun onActivityStopped(value: Activity) { }
+            override fun onActivitySaveInstanceState(value: Activity, state: Bundle) { }
+            override fun onActivityDestroyed(value: Activity) { }
+        }
 
         /** 同时验证真正的输入焦点、视图几何、配置重建与网站图标。 */
         fun run(iconsOnly: Boolean) {
+            val application = inst.targetContext.applicationContext as Application
+            application.registerActivityLifecycleCallbacks(windows)
             activity = inst.startActivitySync(Intent(Intent.ACTION_VIEW, Uri.parse(base + "one"))
                 .setClass(inst.targetContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             val getter = MainActivity::class.java.getDeclaredMethod("getBrowser").apply { isAccessible = true }
@@ -80,10 +94,7 @@ internal object AddressHubChecks {
                 await("书签焦点独立") { model.addressHub.bookmarkQuery == "面板" && model.addressHub.input == HubInput.BOOKMARKS && ime() }
                 check(findAll(inst.uiAutomation.rootInActiveWindow) { it.isEditable && it.isFocused }.size == 1) { "两个编辑框同时获得焦点" }
 
-                val monitor = inst.addMonitor(MainActivity::class.java.name, null, false)
-                main { activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
-                activity = monitor.waitForActivityWithTimeout(8000) ?: error("旋转后没有重建页面")
-                inst.removeMonitor(monitor)
+                rotate(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE, Configuration.ORIENTATION_LANDSCAPE)
                 await("旋转后保留面板") {
                     model.addressHub.visible && model.addressHub.page == AddressHubPage.BOOKMARKS &&
                         model.addressHub.bookmarkQuery == "面板" && activity.window.decorView.hasWindowFocus() && ime()
@@ -95,10 +106,7 @@ internal object AddressHubChecks {
                 main { check(model.current.url == base + "one") { "取消输入改变了原网页" } }
 
                 // 恢复竖屏后从更多菜单进入历史，不能再次强制唤起地址键盘。
-                val portrait = inst.addMonitor(MainActivity::class.java.name, null, false)
-                main { activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
-                activity = portrait.waitForActivityWithTimeout(8000) ?: error("未恢复竖屏")
-                inst.removeMonitor(portrait)
+                rotate(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, Configuration.ORIENTATION_PORTRAIT)
                 click(inst.targetContext.getString(R.string.more))
                 click(inst.targetContext.getString(R.string.history))
                 await("菜单历史入口") { model.addressHub.visible && model.addressHub.page == AddressHubPage.HISTORY && !ime() }
@@ -121,7 +129,19 @@ internal object AddressHubChecks {
                 await("恢复指定旧记录") { !model.addressHub.visible && model.closedTabs.none { it.closureId == closures.last().closureId } }
                 main { check(model.closedTabs.single().closureId == closures.first().closureId) { "误消费了最新恢复记录" } }
                 iconChecks()
-            } finally { scope.cancel() }
+            } finally {
+                main { activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+                application.unregisterActivityLifecycleCallbacks(windows)
+                scope.cancel()
+            }
+        }
+
+        /** 使用实际方向和当前恢复窗口确认旋转，不能把旧窗口的恢复事件当成新布局。 */
+        private fun rotate(request: Int, expected: Int) {
+            main { activity.requestedOrientation = request }
+            await("实际屏幕方向 $expected") {
+                activity.resources.configuration.orientation == expected && activity.window.decorView.hasWindowFocus()
+            }
         }
 
         /** 使用真实 Gecko 请求和解码，覆盖回退、超时、体积限制及正负缓存。 */
@@ -297,9 +317,15 @@ internal object AddressHubChecks {
             error("首次网址未全选：原生选区 $observed；模型选区 ${main { model.addressHub.address.selection }}")
         }
         private fun click(label: String) {
-            var target: AccessibilityNodeInfo? = node { it.text?.toString() == label || it.contentDescription?.toString() == label }
-            while (target != null && !target.isClickable) target = target.parent
-            check(target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) { "无法点击原生资料控件：$label" }
+            repeat(80) {
+                var target: AccessibilityNodeInfo? = findAll(inst.uiAutomation.rootInActiveWindow) {
+                    it.text?.toString() == label || it.contentDescription?.toString() == label
+                }.firstOrNull()
+                while (target != null && !target.isClickable) target = target.parent
+                if (target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return
+                SystemClock.sleep(100)
+            }
+            error("无法点击原生资料控件：$label；面板=${main { model.addressHub.visible }}，输入=${main { model.addressHub.input }}")
         }
 
         private fun setText(value: String) {
