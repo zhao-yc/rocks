@@ -2,7 +2,7 @@
 
 <img src="docs/brand/rocks.svg" width="96" height="96" alt="Rocks browser icon" />
 
-A small, free mobile browser without app ads, promotion slots or a news feed. Rocks prioritizes users in China, with Chinese default UI resources and a starting set of English resources. Android development now follows Kotlin, Jetpack Compose and GeckoView in the standalone `android/gecko-demo` project. The earlier system WebView application remains available for regression checks. Native HarmonyOS uses ArkTS, ArkUI and ArkWeb.
+Rocks (Chinese name: 洛克浏览器) is a small, free mobile browser without app ads, promotion slots or a news feed. Rocks prioritizes users in China, with Chinese default UI resources and a starting set of English resources. Android development now follows Kotlin, Jetpack Compose and GeckoView in the standalone `android/gecko-demo` project. The earlier system WebView application remains available for regression checks. Native HarmonyOS uses ArkTS, ArkUI and ArkWeb.
 
 **Early prototype, not a store-ready browser.** The source repository is public, but an open-source license has **not been selected**. Do not assume a license grant from repository visibility. There is no root `LICENSE` until the owner decides.
 
