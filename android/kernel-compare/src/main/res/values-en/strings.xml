@@ -7,5 +7,9 @@
     <string name="reload">Reload</string>
     <string name="invalid_address">Enter an HTTP or HTTPS URL</string>
     <string name="load_error">Page failed to load; check the URL or network</string>
-    <string name="engine_info">%1$s\nSystem reports: %2$.1f Hz · No app refresh-rate request</string>
+    <string name="engine_info">%1$s\nRequested: %2$s · System reports: %3$.2f Hz</string>
+    <string name="refresh_rate">Refresh rate</string>
+    <string name="refresh_follow">Follow system</string>
+    <string name="refresh_highest">Highest (%1$s)</string>
+    <string name="refresh_unavailable">The previous rate is unavailable; following the system</string>
 </resources>

@@ -7,5 +7,9 @@
     <string name="reload">刷新</string>
     <string name="invalid_address">请输入 HTTP 或 HTTPS 网址</string>
     <string name="load_error">页面载入失败，请检查网址或网络</string>
-    <string name="engine_info">%1$s\n系统报告：%2$.1f Hz · 未主动请求刷新率</string>
+    <string name="engine_info">%1$s\n申请：%2$s · 系统报告：%3$.2f Hz</string>
+    <string name="refresh_rate">刷新率</string>
+    <string name="refresh_follow">跟随系统</string>
+    <string name="refresh_highest">最高（%1$s）</string>
+    <string name="refresh_unavailable">当前屏幕不支持此前档位，已改为跟随系统</string>
 </resources>

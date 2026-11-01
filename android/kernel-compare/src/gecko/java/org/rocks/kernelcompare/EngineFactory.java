@@ -8,7 +8,7 @@ import org.mozilla.geckoview.GeckoRuntimeSettings;
 import org.mozilla.geckoview.GeckoSession;
 import org.mozilla.geckoview.GeckoView;
 
-/** Firefox 版仅创建一个 Gecko 会话，保留默认渲染后端，不注入刷新率偏好。 */
+/** Firefox 版仅创建一个 Gecko 会话，保留默认渲染后端，不修改内核帧率偏好。 */
 final class EngineFactory {
     private static GeckoRuntime runtime;
     private EngineFactory() {}

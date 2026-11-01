@@ -10,8 +10,8 @@ android {
         applicationId = "org.rocks.browser.kerneltest"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0-kernel-test"
+        versionCode = 2
+        versionName = "1.1-kernel-test"
     }
     flavorDimensions += "engine"
     productFlavors {

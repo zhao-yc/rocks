@@ -1,9 +1,7 @@
 package org.rocks.kernelcompare;
 
 import android.app.Activity;
-import android.content.Context;
 import android.graphics.Color;
-import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
@@ -24,15 +22,15 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 /** 两份 APK 使用同一原生界面和同一离线页面，只替换内核适配器。 */
-public final class MainActivity extends Activity implements DisplayManager.DisplayListener {
+public final class MainActivity extends Activity {
     private PageEngine engine;
     private EditText address;
     private TextView info;
     private LinearLayout root;
     private String testUrl;
-    private DisplayManager displays;
+    private RefreshRateController refreshControl;
 
-    /** 原生线性布局不带重叠浮层、滚动动画、纹理读取或帧率请求。 */
+    /** 原生线性布局不带重叠浮层、滚动动画或纹理读取；窗口刷新率由共用选择器申请。 */
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         root = new LinearLayout(this);
@@ -59,9 +57,11 @@ public final class MainActivity extends Activity implements DisplayManager.Displ
         info = new TextView(this);
         info.setTextSize(11);
         info.setTextColor(Color.DKGRAY);
-        info.setMaxLines(2);
+        info.setMaxLines(3);
         info.setPadding(dp(8), 0, dp(8), 0);
-        root.addView(info, new LinearLayout.LayoutParams(-1, dp(42)));
+        root.addView(info, new LinearLayout.LayoutParams(-1, dp(60)));
+        refreshControl = new RefreshRateController(this, root, this::updateInfo);
+        root.addView(refreshControl.view(), new LinearLayout.LayoutParams(-1, dp(48)));
         final LinearLayout entry = new LinearLayout(this);
         address = new EditText(this);
         address.setSingleLine(true);
@@ -94,7 +94,6 @@ public final class MainActivity extends Activity implements DisplayManager.Displ
             openAddress();
             return true;
         });
-        displays = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
         // 两种内核都等原生视口完成布局再加载，避免零尺寸或 Surface 初始位置干扰对照。
         root.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
             @Override public void onGlobalLayout() {
@@ -151,30 +150,30 @@ public final class MainActivity extends Activity implements DisplayManager.Displ
 
     /** 系统刷新率只随显示事件更新，不创建额外的逐帧回调影响网页对比。 */
     private void updateInfo() {
+        if (engine == null) return;
         final Display display = root.getDisplay();
-        info.setText(getString(R.string.engine_info, engine.description(), display == null ? 0f : display.getRefreshRate()));
+        info.setText(getString(R.string.engine_info, engine.description(), refreshControl.requestedLabel(),
+                display == null ? 0f : display.getRefreshRate()));
     }
 
     @Override protected void onResume() {
         super.onResume();
         if (engine != null) {
             engine.foreground(true);
-            displays.registerDisplayListener(this, null);
+            refreshControl.resume();
             updateInfo();
         }
     }
     @Override protected void onPause() {
-        if (engine != null) { displays.unregisterDisplayListener(this); engine.foreground(false); }
+        if (engine != null) { refreshControl.pause(); engine.foreground(false); }
         super.onPause();
     }
     @Override protected void onDestroy() {
+        if (refreshControl != null) refreshControl.close();
         if (engine != null) {
             root.removeView(engine.view());
             engine.close();
         }
         super.onDestroy();
     }
-    @Override public void onDisplayAdded(int id) {}
-    @Override public void onDisplayRemoved(int id) {}
-    @Override public void onDisplayChanged(int id) { updateInfo(); }
 }
