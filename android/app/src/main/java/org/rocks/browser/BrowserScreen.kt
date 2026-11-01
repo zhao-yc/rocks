@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -160,7 +161,8 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
         Box(Modifier.fillMaxSize().padding(padding)) {
             if (active.url.isEmpty()) {
                 Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Rocks", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
+                    // 首页与系统应用标签使用同一份本地化名称。
+                    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(12.dp))
                     Text(activity.getString(R.string.tagline), style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
@@ -260,7 +262,7 @@ fun BrowserScreen(activity: MainActivity, model: BrowserViewModel = viewModel())
             dismissButton = { TextButton(onClick = { pendingDownload = null }) { Text(activity.getString(R.string.cancel)) } })
     }
     model.notice?.let { message ->
-        AlertDialog(onDismissRequest = model::clearNotice, title = { Text("Rocks") }, text = { Text(message) },
+        AlertDialog(onDismissRequest = model::clearNotice, title = { Text(stringResource(R.string.app_name)) }, text = { Text(message) },
             confirmButton = { TextButton(onClick = model::clearNotice) { Text(activity.getString(R.string.ok)) } })
     }
     engine.fullScreen?.let { view ->

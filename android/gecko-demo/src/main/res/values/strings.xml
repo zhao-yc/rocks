@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Rocks · Gecko</string>
+    <string name="app_name">洛克浏览器</string>
     <string name="home">起始页</string>
     <string name="back">后退</string>
     <string name="forward">前进</string>
@@ -16,9 +16,9 @@
     <string name="uninstall">卸载</string>
     <string name="open_panel">打开面板</string>
     <string name="address_hint">搜索或输入网址</string>
-    <string name="home_eyebrow">ROCKS / 自由浏览</string>
+    <string name="home_eyebrow">洛克浏览器 / 自由浏览</string>
     <string name="home_title">把网页，\n留在手边。</string>
-    <string name="home_intro">以 Firefox 引擎为基础，配上 Rocks 的底部手势与扩展体验。</string>
+    <string name="home_intro">以 Firefox 引擎为基础，配上洛克浏览器的底部手势与扩展体验。</string>
     <string name="try_extensions">体验扩展插件</string>
     <string name="gesture_title">在底部，左右滑动</string>
     <string name="gesture_body">左右拖动悬浮地址栏切换标签，短滑会回到原页。向下浏览时收起为网址胶囊，向上浏览或轻点胶囊展开。</string>
@@ -27,10 +27,10 @@
     <string name="baidu_page">百度</string>
     <string name="demo_limits">已支持标签网址恢复、书签、历史、下载、文件上传和扩展。重启后不恢复表单、滚动位置或前后退栈；新增默认浏览器、页面内查找、桌面版与网站设备授权；暂不提供密码管理和无痕模式。</string>
     <string name="extensions_intro">安装扩展后，在网页打开面板即可使用。支持启停、卸载和检查更新；更新新增权限仍需确认。</string>
-    <string name="paper_description">Rocks 自制阅读扩展。调整网页纸张背景和文字间距，无需网络下载。</string>
+    <string name="paper_description">洛克浏览器自制阅读扩展。调整网页纸张背景和文字间距，无需网络下载。</string>
     <string name="dark_description">将网页转换为深色阅读样式。安装后打开面板，可按网站开关深色模式。</string>
     <string name="ublock_description">过滤网页广告与部分跟踪请求。打开面板查看当前网站的过滤情况。</string>
-    <string name="bundled_source">随应用提供 · Rocks 演示扩展</string>
+    <string name="bundled_source">随应用提供 · 洛克浏览器演示扩展</string>
     <string name="mozilla_source">Mozilla 官方扩展源 · 安装需联网</string>
     <string name="enabled_version">已启用 · %1$s</string>
     <string name="disabled_version">已禁用 · %1$s</string>
@@ -67,10 +67,10 @@
     <string name="library_empty">这里还没有记录</string>
     <string name="search_engine">默认搜索引擎</string>
     <string name="clear_history">清空历史</string>
-    <string name="clear_history_note">清空全部网址历史，包括当前搜索未显示的记录。不会清除 Cookie、网站存储、已打开标签或下载文件。</string>
+    <string name="clear_history_note">清空洛克浏览器的全部网址历史，包括当前搜索未显示的记录。不会清除 Cookie、网站存储、已打开标签或下载文件。</string>
     <string name="close_others">关闭其他</string>
     <string name="persistence_note">自动保存标签网址、当前选择、书签和历史。表单、滚动位置及前后退栈仅在本次运行期间保留。</string>
-    <string name="version_text">Rocks 0.4.5 · GeckoView 158</string>
+    <string name="version_text">洛克浏览器 0.4.7 · GeckoView 158</string>
     <string name="restore_failed">本地数据无法读取，原文件已保留。本次操作暂不保存。</string>
     <string name="save_failed">本地保存失败，后续操作会重试。</string>
     <string name="check_update">检查更新</string>
@@ -97,8 +97,8 @@
     <string name="toolbar_compact">浏览器操作栏已收起</string>
     <string name="toolbar_expanded">浏览器操作栏已展开</string>
     <string name="default_browser">默认浏览器</string>
-    <string name="default_browser_active">Rocks 已是默认浏览器。</string>
-    <string name="default_browser_note">设为默认后，可用 Rocks 打开其他应用中的网页链接。</string>
+    <string name="default_browser_active">洛克浏览器已是默认浏览器。</string>
+    <string name="default_browser_note">设为默认后，可用洛克浏览器打开其他应用中的网页链接。</string>
     <string name="default_browser_settings">管理默认应用</string>
     <string name="set_default_browser">设为默认浏览器</string>
     <string name="system_settings_unavailable">无法打开系统设置，请在手机设置中手动调整。</string>
@@ -117,7 +117,7 @@
     <string name="location">定位</string>
     <string name="site_permission_title">允许 %1$s 使用设备功能？</string>
     <string name="site_permission_body">网站请求：%1$s。确认后，若 Android 尚未授权，会继续显示系统权限请求。不会据此自动授权其他网站。</string>
-    <string name="location_permission_note">定位选择由浏览内核按网站保存，可在“更多 → 网站权限”中重置。系统只授予近似位置时，Rocks 会尊重该选择。</string>
+    <string name="location_permission_note">定位选择由浏览内核按网站保存，可在“更多 → 网站权限”中重置。系统只授予近似位置时，洛克浏览器会尊重该选择。</string>
     <string name="site_permissions_note">相机、麦克风每次请求均需网站确认。定位选择由内核按网站保存；重置后下次可重新选择。仅支持当前 HTTPS 网页自身的设备请求。Android 应用权限是独立的总开关，重置网站不会撤销它。</string>
     <string name="recording_active">网页正在使用相机或麦克风</string>
     <string name="reset_site_permissions">重置本站定位并重新加载</string>

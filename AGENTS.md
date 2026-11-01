@@ -1,5 +1,6 @@
 # Rocks 开发约定
 
+- 项目英文名为 Rocks，中文名为“洛克浏览器”。
 - 产品面向中国用户优先，默认中文资源，同时维护英文资源；README 保留英文。无应用广告、推广位、资讯流或遥测。
 - Android 主线为 Kotlin/Compose/GeckoView（`android/gecko-demo`，沿用体验版包名与签名以便覆盖升级）；原 `android/app` WebView 工程保留作回归参考；鸿蒙为 ArkTS/ArkUI/ArkWeb。不要改为跨平台网页壳。
 - `core` 不依赖 Android；`shared/browser-data.schema.json` 与 fixture 是双端数据契约。修改需同步模型、codec、测试和鸿蒙适配计划。

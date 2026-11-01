@@ -10,7 +10,7 @@
     <string name="tab_actions">标签页操作</string>
     <string name="close_current_tab">关闭当前标签页</string>
     <string name="close_other_tabs">关闭其他标签页</string>
-    <string name="app_name">Rocks</string>
+    <string name="app_name">洛克浏览器</string>
     <string name="search_hint">搜索或输入网址</string>
     <string name="stop_loading">停止加载</string>
     <string name="reload">刷新</string>
@@ -45,7 +45,7 @@
     <string name="save_failed">无法保存会话，请检查可用存储空间。</string>
     <string name="unsupported_download">暂不支持这种下载类型，目前仅支持 HTTP/HTTPS 下载。</string>
     <string name="unsupported_link_hint">暂不支持此链接，已留在当前网页。</string>
-    <string name="certificate_error">网站证书错误，Rocks 已阻止连接，不能跳过证书检查。</string>
+    <string name="certificate_error">网站证书错误，洛克浏览器已阻止连接，不能跳过证书检查。</string>
     <string name="page_failed">网页加载失败，请检查网址和网络连接。</string>
     <string name="renderer_stopped">网页进程已停止，请重新打开网址。</string>
     <string name="device_permission_denied">当前原型暂不开放网站相机和麦克风权限。</string>

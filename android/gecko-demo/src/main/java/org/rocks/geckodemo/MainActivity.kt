@@ -15,9 +15,6 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.Orientation
@@ -39,16 +36,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -60,25 +50,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
-import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     private val browser: BrowserModel by viewModels()
-    private lateinit var topChrome: ImmersiveStatusBar
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT))
         window.isStatusBarContrastEnforced = false
-        topChrome = ImmersiveStatusBar(window)
-        lifecycle.addObserver(topChrome)
+        // 透明对照版使用固定浅色安全区，无需采集网页来判断状态栏图标颜色。
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
         if (savedInstanceState == null) handleWebIntent(intent)
         setContent {
             MaterialTheme(colorScheme = lightColorScheme(
@@ -87,7 +73,7 @@ class MainActivity : ComponentActivity() {
                 background = Color(0xFFF8F8F2), surface = Color(0xFFF8F8F2),
                 surfaceContainer = Color(0xFFEBEFE5), surfaceContainerHigh = Color(0xFFE5EADD),
                 onSurface = Color(0xFF202822), onSurfaceVariant = Color(0xFF526451),
-            )) { BrowserScreen(browser, topChrome) }
+            )) { BrowserScreen(browser) }
         }
     }
     private fun handleWebIntent(intent: Intent?) {
@@ -113,12 +99,13 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
+private fun BrowserScreen(model: BrowserModel) {
     if (model.restoring) {
         Surface(Modifier.fillMaxSize()) { Box(contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
         return
     }
     val context = LocalContext.current
+    val appName = stringResource(R.string.app_name)
     val shareLabel = stringResource(R.string.share)
     val tabClosedLabel = stringResource(R.string.tab_closed)
     val undoLabel = stringResource(R.string.undo)
@@ -191,20 +178,8 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
     var draggingTabs by remember { mutableStateOf(false) }
     var toolbarHeight by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
-    val topHeight = if (model.fullScreen) 0 else WindowInsets.safeDrawing.getTop(density)
-    val pageScope = BrowserPageScope(current.id, current.documentRevision, current.url)
-    val topReady = current.contentPainted && !current.error && !model.fullScreen && !showTabs && library == null
-    val topFallback = if (current.url == DemoPolicy.HOME) MaterialTheme.colorScheme.surface.toArgb() else TopChromePolicy.WHITE
-    val topSession = current.session.takeUnless { current.url == DemoPolicy.HOME }
-    val topScope = pageScope.takeUnless { current.url == DemoPolicy.HOME }
-    val topBackground = topChrome.backgroundFor(topSession, topScope, topFallback)
-    SideEffect {
-        topChrome.configure(topSession, topScope, topReady, topHeight, topFallback) {
-            if (!model.fullScreen && current.contentPainted && !current.error &&
-                model.selectedId == current.id && current in model.tabs)
-                BrowserPageScope(current.id, current.documentRevision, current.url) else null
-        }
-    }
+    // 网页与起始页共用固定底色，顶部效果完全关闭，不读取网页纹理。
+    val pageBackground = if (current.url == DemoPolicy.HOME) MaterialTheme.colorScheme.surface else Color.White
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val keyboardVisible = WindowInsets.ime.getBottom(density) > 0
@@ -310,20 +285,20 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = Color(topBackground)) {
+    Surface(modifier = Modifier.fillMaxSize(), color = pageBackground) {
         Box(Modifier.fillMaxSize()) {
-            // 系统安全区只在容器消费一次；底部悬浮栏仍为兄弟浮层，不随顶部效果改变网页尺寸。
+            // 顶部与两侧安全区只消费一次；滚动时不再平移真实网页或触发顶部效果。
             Box(Modifier.fillMaxSize().then(if (model.fullScreen) Modifier else
                 Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
                 .imePadding()) {
                 HorizontalPager(state = pager, userScrollEnabled = false, beyondViewportPageCount = 1,
-                    key = { model.tabs[it].id }, modifier = Modifier.fillMaxSize().onSizeChanged { contentWidth = it.width.toFloat() }) { index ->
+                    key = { model.tabs[it].id }, modifier = Modifier.fillMaxSize().clipToBounds().onSizeChanged { contentWidth = it.width.toFloat() }) { index ->
                     val tab = model.tabs.getOrNull(index)
                     if (tab != null) {
                         if (tab.url == DemoPolicy.HOME) HomeScreen(model,
                             onOpen = { model.navigate(it) }, onExtensions = { showExtensions = true })
                         else GeckoPage(tab.session, Modifier.fillMaxSize(), if (model.fullScreen) 0 else bottomObscured,
-                            topChrome, !model.fullScreen)
+                            protectTopAndSides = !model.fullScreen)
                         if (tab.error) {
                             Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = MaterialTheme.colorScheme.errorContainer) {
                                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -388,9 +363,6 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
                             .navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp))
                 }
             }
-            if (!model.fullScreen) key(topScope) {
-                TopStatusArea(topChrome, topScope, topBackground, topHeight, TopChromePolicy.strength(current.topScrollY))
-            }
         }
     }
 
@@ -415,7 +387,7 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
                 TextButton(onClick = { model.openLink(false) }) { Text(stringResource(R.string.open_new_tab)) }
                 TextButton(onClick = { model.openLink(true) }) { Text(stringResource(R.string.open_background)) }
                 TextButton(onClick = {
-                    (context.getSystemService(ClipboardManager::class.java)).setPrimaryClip(ClipData.newPlainText("Rocks", target.url))
+                    (context.getSystemService(ClipboardManager::class.java)).setPrimaryClip(ClipData.newPlainText(appName, target.url))
                     model.linkMenu = null; model.notify(R.string.link_copied)
                 }) { Text(stringResource(R.string.copy_link)) }
                 TextButton(onClick = {
@@ -449,64 +421,23 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
 }
 
 @Composable
-/** 会话的原生 View 只在主网页注册为顶部采样源，扩展面板沿用独立生命周期。 */
+/** 网页与扩展面板沿用独立生命周期；主网页由宿主统一消费顶部安全区。 */
 private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured: Int = 0,
-    topChrome: ImmersiveStatusBar? = null, protectTopAndSides: Boolean = false) {
+    protectTopAndSides: Boolean = false) {
     key(session) {
         AndroidView(factory = { context ->
             SafeGeckoView(context).apply {
                 this.protectTopAndSides = protectTopAndSides
                 setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
                 setSession(session)
-                topChrome?.attach(session, this)
             }
         }, modifier = modifier, update = { view ->
             view.protectTopAndSides = protectTopAndSides
-            // Keep bottom-fixed site controls visible without resizing the GeckoView or reserving
-            // a blank toolbar strip. Gecko adjusts compositing for the overlay's measured height.
+            // 沿用底部遮挡提示，工具栏收放不会改变网页物理尺寸。
             view.setVerticalClipping(bottomObscured)
         }, onReset = null, onRelease = {
-            topChrome?.release(session, it)
             it.releaseSession()
         })
-    }
-}
-
-/** 状态栏模糊在网页上沿渐隐；绘制层不接收触摸，也不改变网页尺寸和安全区。 */
-@Composable
-private fun TopStatusArea(chrome: ImmersiveStatusBar, scope: BrowserPageScope?, backgroundColor: Int,
-    height: Int, targetStrength: Float) {
-    val strength by animateFloatAsState(targetStrength, tween(100), label = "顶部滚动过渡")
-    val image = chrome.imageFor(scope, height)
-    val background = Color(backgroundColor)
-    val density = LocalDensity.current
-    // 仅让效果越过安全区下缘，留白仍只消费一次；回顶时整个渐隐尾部消失。
-    val fadeHeight = if (scope != null && height > 0) 18.dp else 0.dp
-    SideEffect { chrome.updateAppearance(backgroundColor, strength, image != null) }
-    Canvas(Modifier.fillMaxWidth().height(with(density) { height.toDp() } + fadeHeight)) {
-        val safeHeight = height.toFloat()
-        drawRect(background, size = Size(size.width, safeHeight))
-        if (image != null && strength > 0f && height > 0) {
-            clipRect(bottom = safeHeight) {
-                drawImage(image, dstSize = IntSize(size.width.roundToInt(), height), alpha = strength)
-            }
-            val tailHeight = (size.height - safeHeight).roundToInt()
-            if (tailHeight > 0) clipRect(top = safeHeight) {
-                // 单独的小图层承接最后一行模糊颜色；DstIn 只消隐效果，不擦除底下的网页。
-                drawIntoCanvas { canvas ->
-                    canvas.saveLayer(Rect(0f, safeHeight, size.width, size.height), Paint())
-                    drawImage(image, srcOffset = IntOffset(0, image.height - 1), srcSize = IntSize(image.width, 1),
-                        dstOffset = IntOffset(0, height), dstSize = IntSize(size.width.roundToInt(), tailHeight))
-                    drawRect(brush = Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = strength),
-                        0.35f to Color.Black.copy(alpha = strength * 0.82f),
-                        1f to Color.Transparent,
-                        startY = safeHeight, endY = size.height),
-                        blendMode = BlendMode.DstIn)
-                    canvas.restore()
-                }
-            }
-        }
     }
 }
 

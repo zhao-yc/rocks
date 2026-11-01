@@ -2,7 +2,7 @@
 
 <img src="docs/brand/rocks.svg" width="96" height="96" alt="Rocks browser icon" />
 
-A small, free mobile browser without app ads, promotion slots or a news feed. Rocks prioritizes users in China, with Chinese default UI resources and a starting set of English resources. Android development now follows Kotlin, Jetpack Compose and GeckoView in the standalone `android/gecko-demo` project. The earlier system WebView application remains available for regression checks. Native HarmonyOS uses ArkTS, ArkUI and ArkWeb.
+Rocks (Chinese name: 洛克浏览器) is a small, free mobile browser without app ads, promotion slots or a news feed. Rocks prioritizes users in China, with Chinese default UI resources and a starting set of English resources. Android development now follows Kotlin, Jetpack Compose and GeckoView in the standalone `android/gecko-demo` project. The earlier system WebView application remains available for regression checks. Native HarmonyOS uses ArkTS, ArkUI and ArkWeb.
 
 **Early prototype, not a store-ready browser.** The source repository is public, but an open-source license has **not been selected**. Do not assume a license grant from repository visibility. There is no root `LICENSE` until the owner decides.
 
@@ -10,9 +10,9 @@ A small, free mobile browser without app ads, promotion slots or a news feed. Ro
 
 The Android main line uses GeckoView with Firefox WebExtensions and the Rocks interface. See [Gecko build and feature notes](android/gecko-demo/README.md) and the [verification record](docs/Gecko体验版验证.md).
 
-**[Download Gecko 0.4.5 APK](https://github.com/zhao-yc/rocks/releases/download/v0.4.5-gecko/rocks-gecko-0.4.5.apk)** — Android 10+, ARM64, fixed development certificate, compatible with previous Gecko previews. Adds a fading top blur and retains the display-release crash fix. The original WebView application uses a separate package and data store.
+**[Download previous Gecko 0.4.6 APK](https://github.com/zhao-yc/rocks/releases/download/v0.4.6-gecko/rocks-gecko-0.4.6.apk)** — Android 10+, ARM64, fixed development certificate, compatible with previous Gecko previews. This previous build has the blurred status-bar overlay. The current 0.4.7 comparison build removes that effect and its sampling work while keeping a fixed top safe area; see the [comparison notes](docs/releases/gecko-0.4.7.md). The original WebView application uses a separate package and data store.
 
-The preview includes a protected top safe area with adaptive background and a blurred scroll-edge transition, a floating toolbar that shrinks while reading, sideways tab switching, URL/session restoration, bookmarks/history, search settings, uploads/downloads, default-browser integration, find in page, per-tab desktop mode, website camera/microphone/location requests and curated Firefox extensions. Current source also adds local address suggestions, in-process closed-tab recovery, bookmark/history search and stop-loading controls for the next preview. System UI, hardware permissions, cutouts and gesture feel still require phone acceptance; this is a development preview. Complete extension-store integration, account sync, a password vault and private browsing are not implemented.
+The preview includes a fixed top safe area with a transparent status bar over the light app background, a floating toolbar that shrinks while reading, sideways tab switching, URL/session restoration, bookmarks/history, search settings, uploads/downloads, default-browser integration, find in page, per-tab desktop mode, website camera/microphone/location requests and curated Firefox extensions. Current source also adds local address suggestions, in-process closed-tab recovery, bookmark/history search and stop-loading controls for the next preview. System UI, hardware permissions, cutouts and gesture feel still require phone acceptance; this is a development preview. Complete extension-store integration, account sync, a password vault and private browsing are not implemented.
 
 ## Original WebView scope
 

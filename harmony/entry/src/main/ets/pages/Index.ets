@@ -54,7 +54,8 @@ struct Index {
         LoadingProgress().layoutWeight(1)
       } else if (this.active().url === '') {
         Column() {
-          Text('Rocks').fontSize(42).fontColor('#35614B')
+          // 首页与桌面标签共用本地化应用名称。
+          Text($r('app.string.app_name')).fontSize(42).fontColor('#35614B')
           Text($r('app.string.home_tagline')).fontSize(18).margin({ top: 16 })
         }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
       } else {

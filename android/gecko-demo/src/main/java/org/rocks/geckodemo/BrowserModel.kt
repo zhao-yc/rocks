@@ -6,7 +6,6 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -41,17 +40,13 @@ internal class BrowserTab(val id: Long, val session: GeckoSession, val extension
     var error by mutableStateOf(false)
     var pendingUrl: String? = null
     var documentRevision by mutableLongStateOf(0L)
-    var topScrollY by mutableFloatStateOf(0f)
-    var contentPainted by mutableStateOf(false)
     var desktop by mutableStateOf(false)
     var recordingCamera by mutableStateOf(false)
     var recordingMicrophone by mutableStateOf(false)
 
-    /** 新文档开始时立即废弃旧截图与滚动位置，等待 Gecko 确认新内容已绘制。 */
+    /** 新文档开始时更新身份，避免权限与查找结果跨文档生效。 */
     fun beginDocument() {
         documentRevision++
-        topScrollY = 0f
-        contentPainted = false
     }
 
     /** 引擎回调和用户导航共用加载状态，进度值不再承担停止/失败判断。 */
@@ -413,8 +408,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         }
         session.compositorScrollDelegate = object : GeckoSession.CompositorScrollDelegate {
             override fun onScrollChanged(session: GeckoSession, update: GeckoSession.ScrollPositionUpdate) {
-                // 顶部效果跟随真实页面位置，脚本滚动不会因此触发底部工具栏收起。
-                if (update.scrollY.isFinite()) tab.topScrollY = update.scrollY.coerceAtLeast(0f)
+                // 只维护底栏的方向阈值状态，避免每次滚动都写入 Compose 页面状态。
                 if (tab.id != selectedId || !foreground || fullScreen) return
                 toolbarCollapsed = toolbarScroll.onScroll(update.scrollY, update.zoom,
                     update.source == GeckoSession.ScrollPositionUpdate.SOURCE_USER_INTERACTION,
@@ -422,8 +416,6 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             }
         }
         session.contentDelegate = object : GeckoSession.ContentDelegate {
-            override fun onFirstContentfulPaint(session: GeckoSession) { tab.contentPainted = true }
-            override fun onPaintStatusReset(session: GeckoSession) { tab.contentPainted = false }
             override fun onTitleChange(session: GeckoSession, title: String?) { tab.title = title.orEmpty().take(512); save() }
             override fun onCloseRequest(session: GeckoSession) { closeTab(tab.id) }
             override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
