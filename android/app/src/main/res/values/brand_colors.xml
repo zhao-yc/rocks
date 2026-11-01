@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 由 scripts/sync-brand-icons.mjs 同步。 -->
+<resources>
+    <color name="rocks_icon_background">#173F35</color>
+</resources>

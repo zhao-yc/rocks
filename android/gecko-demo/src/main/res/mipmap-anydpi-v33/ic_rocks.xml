@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 由 scripts/sync-brand-icons.mjs 同步；背景延展至整个系统遮罩。 -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/rocks_icon_background" />
+    <foreground android:drawable="@drawable/ic_rocks_foreground" />
+    <monochrome android:drawable="@drawable/ic_rocks_foreground" />
+</adaptive-icon>

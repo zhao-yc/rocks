@@ -1,4 +1,12 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
-    <path android:fillColor="#35614B" android:pathData="M24,2L43,13L43,35L24,46L5,35L5,13Z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M16,13L26,13Q34,13 34,21Q34,26 29,28L35,35L27,35L22,28L22,35L16,35ZM22,19L22,23L26,23Q28,23 28,21Q28,19 26,19Z" />
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 由 scripts/sync-brand-icons.mjs 同步，设计源为 docs/brand/rocks.svg。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="72dp" android:height="72dp"
+    android:viewportWidth="72" android:viewportHeight="72">
+    <path android:fillColor="#173F35" android:pathData="M18 0H54A18 18 0 0 1 72 18V54A18 18 0 0 1 54 72H18A18 18 0 0 1 0 54V18A18 18 0 0 1 18 0Z" />
+    <group android:translateX="-11.52" android:translateY="-11.52" android:scaleX="0.88" android:scaleY="0.88">
+        <path android:fillColor="#F3F5E7" android:fillType="evenOdd" android:pathData="M31 74V42C31 31 39 24 50 24H58C70 24 78 32 78 43C78 52 73 58 66 61L80 78H64Q62 78 61 76L47 59V74Q47 78 43 78H35Q31 78 31 74ZM47 38V48H57C61 48 64 46 64 43C64 40 61 38 57 38Z" />
+        <path android:fillColor="#B5D4B7" android:pathData="M31 42C31 31 39 24 50 24H58C70 24 78 32 78 43H64C64 40 61 38 57 38H47Z" />
+        <path android:fillColor="#80B99D" android:pathData="M47 59L66 61L80 78H64Q62 78 61 76Z" />
+    </group>
 </vector>

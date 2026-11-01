@@ -25,6 +25,8 @@ jobs:
       certificate: ${{ steps.signature.outputs.certificate_sha256 }}
     steps:
       - uses: actions/checkout@v4
+      - name: 检查品牌图标同步
+        run: node scripts/sync-brand-icons.mjs --check
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
