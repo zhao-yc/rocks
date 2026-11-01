@@ -16,6 +16,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -186,6 +187,7 @@ private fun BrowserScreen(model: BrowserModel) {
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val keyboardVisible = WindowInsets.ime.getBottom(density) > 0
+    SideEffect { model.bottomBackground.setPaused(keyboardVisible) }
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val navigationBottom = WindowInsets.navigationBars.getBottom(density)
     val bottomObscured = toolbarHeight + navigationBottom + with(density) { 16.dp.roundToPx() }
@@ -309,11 +311,10 @@ private fun BrowserScreen(model: BrowserModel) {
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = pageBackground) {
-        Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().imePadding()) {
             // 顶部与两侧安全区只消费一次；滚动时不再平移真实网页或触发顶部效果。
             Box(Modifier.fillMaxSize().then(if (model.fullScreen) Modifier else
-                Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
-                .imePadding()) {
+                Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))) {
                 HorizontalPager(state = pager, userScrollEnabled = false, beyondViewportPageCount = 1,
                     key = { model.tabs[it].id }, modifier = Modifier.fillMaxSize().clipToBounds().onSizeChanged { contentWidth = it.width.toFloat() }) { index ->
                     val tab = model.tabs.getOrNull(index)
@@ -322,6 +323,7 @@ private fun BrowserScreen(model: BrowserModel) {
                             onOpen = { model.navigate(it) }, onExtensions = { showExtensions = true })
                         else GeckoPage(tab.session, Modifier.fillMaxSize(), if (model.fullScreen) 0 else bottomObscured,
                             protectTopAndSides = !model.fullScreen,
+                            onGeometry = model.bottomBackground::geometry,
                             allowFocus = tab.id == model.selectedId && windowFocused && !editing && !model.finder.visible)
                         if (tab.error) {
                             Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = MaterialTheme.colorScheme.errorContainer) {
@@ -347,6 +349,14 @@ private fun BrowserScreen(model: BrowserModel) {
                     if (editing) Box(Modifier.fillMaxSize().clickable(
                         interactionSource = remember { MutableInteractionSource() }, indication = null,
                         onClickLabel = stringResource(R.string.cancel), onClick = ::finishEditing))
+                }
+            }
+            // 全宽纯色层位于网页上方、工具栏下方；沿用遮挡高度，不改变网页尺寸。
+            if (!model.fullScreen && !keyboardVisible) model.bottomBackground.color?.let { color ->
+                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .height(with(density) { bottomObscured.toDp() }).background(Color(color)))
+            }
+            if (!model.fullScreen) {
                     FloatingBrowserToolbar(model, compact, editing, address, {
                         if (it.text != address.text) { addressChanged = true; addressError = null }
                         address = it
@@ -383,9 +393,10 @@ private fun BrowserScreen(model: BrowserModel) {
                             }, shareLabel))
                         },
                         onBarHeight = { toolbarHeight = it },
-                        modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 600.dp).fillMaxWidth()
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                            .widthIn(max = 600.dp).fillMaxWidth()
                             .navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp))
-                }
             }
         }
     }
@@ -447,7 +458,8 @@ private fun BrowserScreen(model: BrowserModel) {
 @Composable
 /** 网页与扩展面板沿用独立生命周期；主网页由宿主统一消费顶部安全区。 */
 private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured: Int = 0,
-    protectTopAndSides: Boolean = false, allowFocus: Boolean = true) {
+    protectTopAndSides: Boolean = false, allowFocus: Boolean = true,
+    onGeometry: ((GeckoView, Int) -> Unit)? = null) {
     key(session) {
         AndroidView(factory = { context ->
             SafeGeckoView(context).apply {
@@ -467,6 +479,7 @@ private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured:
             } else if (view.hasFocus()) view.clearFocus()
             // 沿用底部遮挡提示，工具栏收放不会改变网页物理尺寸。
             view.setVerticalClipping(bottomObscured)
+            onGeometry?.invoke(view, bottomObscured)
         }, onReset = null, onRelease = {
             it.releaseSession()
         })

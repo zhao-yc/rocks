@@ -112,6 +112,9 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     private fun resetToolbar() { toolbarScroll.reset(); toolbarCollapsed = false }
     private var nextId = 1L
     private var foreground = true
+    val bottomBackground = BottomBarBridge(controller) { session ->
+        if (fullScreen) null else pageScope(session)
+    }
     private var pendingInstall: GeckoResult<WebExtension>? = null
     private var disposed = false
     var restoring by mutableStateOf(true)
@@ -162,6 +165,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         val tab = current
         if (!DemoPolicy.isWebUrl(tab.url)) return
         sitePermissions.cancel(); answerQuestion(false); finder.close(); tab.beginDocument()
+        bottomBackground.sync()
         tab.desktop = !tab.desktop
         tab.session.settings.userAgentMode = if (tab.desktop) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         tab.session.settings.viewportMode = if (tab.desktop) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP else GeckoSessionSettings.VIEWPORT_MODE_MOBILE
@@ -221,7 +225,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun putExtension(extension: WebExtension) {
-        if (disposed) return
+        if (disposed || extension.id == BottomBarBridge.ID) return
         val index = extensions.indexOfFirst { it.id == extension.id }
         if (index < 0) extensions.add(extension) else extensions[index] = extension
         extension.setActionDelegate(actionDelegate)
@@ -356,6 +360,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                     automaticHome?.navigationRequested(tab.id, url)
                     if (tab.url != url) {
                         tab.documentRevision++
+                        bottomBackground.sync()
                         if (tab.id == selectedId) { sitePermissions.cancel(); finder.close(); files.cancelPrompts(); answerQuestion(false); linkMenu = null }
                     }
                     if (tab.url != url && tab.id == selectedId) resetToolbar()
@@ -373,6 +378,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                     // 失败导航可能没有提交位置；保留失败网址供原生重试，忽略随后引擎的空白错误回退。
                     if (uri != null && DemoPolicy.canLoad(uri, tab.extensionBase)) tab.url = uri
                     tab.beginDocument(); tab.failLoad()
+                    bottomBackground.sync()
                     if (tab.id == selectedId) { sitePermissions.cancel(); finder.close(); files.cancelPrompts(); answerQuestion(false) }
                 }
                 return null // Never create certificate exceptions or bypass TLS errors.
@@ -384,6 +390,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                 automaticHome?.navigationRequested(tab.id, url)
                 tab.startLoad()
                 tab.beginDocument()
+                bottomBackground.sync()
                 if (tab.id == selectedId) { sitePermissions.cancel(); finder.close(); answerQuestion(false); resetToolbar() }
             }
             override fun onProgressChange(session: GeckoSession, progress: Int) {
@@ -419,9 +426,11 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             override fun onTitleChange(session: GeckoSession, title: String?) { tab.title = title.orEmpty().take(512); save() }
             override fun onCloseRequest(session: GeckoSession) { closeTab(tab.id) }
             override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
-                if (tab.id == selectedId) { this@BrowserModel.fullScreen = fullScreen; resetToolbar() }
+                if (tab.id == selectedId) { this@BrowserModel.fullScreen = fullScreen; resetToolbar(); bottomBackground.sync() }
             }
-            override fun onCrash(session: GeckoSession) { if (tab in tabs) tab.failLoad() }
+            override fun onCrash(session: GeckoSession) {
+                if (tab in tabs) { tab.beginDocument(); tab.failLoad(); bottomBackground.sync() }
+            }
             override fun onContextMenu(session: GeckoSession, screenX: Int, screenY: Int, element: GeckoSession.ContentDelegate.ContextElement) {
                 val url = element.linkUri ?: return
                 if (foreground && tab.id == selectedId && DemoPolicy.isWebUrl(url))
@@ -452,6 +461,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             if (url != DemoPolicy.HOME) tab.pendingUrl = url
         }
         extensions.forEach { attachExtension(tab, it) }
+        if (extensionBase == null) bottomBackground.attach(session)
         tabs.add(insertionIndex?.coerceIn(0, tabs.size) ?: tabs.size, tab)
         if (select || tabs.size == 1) selectTab(tab.id) else updateActiveSessions()
         save()
@@ -512,6 +522,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             if (showUndoNotice) closeNotice = it
         }
         removed.session.setActive(false)
+        bottomBackground.detach(removed.session)
         removed.session.close()
         overrides.keys.filter { it.second == id }.forEach { overrides.remove(it) }
         if (tabs.isEmpty()) newTab(DemoPolicy.HOME)?.let { automaticHome = AutomaticHomeMarker(it.id) }
@@ -545,6 +556,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         val url = DemoPolicy.inputUrl(input, searchEngine) ?: run { notify(R.string.unsupported_link); return false }
         automaticHome?.usedByUser(current.id)
         sitePermissions.cancel(); finder.close(); current.beginDocument()
+        bottomBackground.sync()
         files.cancelPrompts(); answerQuestion(false); linkMenu = null
         current.pendingUrl = null
         closePopup(); current.url = url; current.startLoad(); current.session.loadUri(url)
@@ -552,10 +564,11 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         return true
     }
 
-    fun home() { automaticHome?.usedByUser(current.id); sitePermissions.cancel(); finder.close(); current.beginDocument(); files.cancelPrompts(); current.pendingUrl = null; current.url = DemoPolicy.HOME; current.stopLoad(); current.session.loadUri(DemoPolicy.HOME); save() }
+    fun home() { automaticHome?.usedByUser(current.id); sitePermissions.cancel(); finder.close(); current.beginDocument(); bottomBackground.sync(); files.cancelPrompts(); current.pendingUrl = null; current.url = DemoPolicy.HOME; current.stopLoad(); current.session.loadUri(DemoPolicy.HOME); save() }
     fun back() { if (fullScreen) current.session.exitFullScreen() else if (current.canGoBack) current.session.goBack() }
     fun reload() {
         sitePermissions.cancel(); finder.close(); current.beginDocument(); answerQuestion(false)
+        bottomBackground.sync()
         current.startLoad()
         if (!current.session.isOpen) { current.session.open(runtime); current.session.loadUri(current.url) }
         else current.session.reload()
@@ -576,6 +589,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun updateActiveSessions() {
+        bottomBackground.sync()
         val selected = tabs.indexOfFirst { it.id == selectedId }
         tabs.forEachIndexed { index, it ->
             if (!restoring && foreground && kotlin.math.abs(index - selected) <= 1) {
@@ -749,7 +763,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             val restored = storage.restore()
             storageReadOnly = restored.isFailure
             restored.getOrNull()?.let { data ->
-                tabs.forEach { it.session.close() }; tabs.clear()
+                tabs.forEach { bottomBackground.detach(it.session); it.session.close() }; tabs.clear()
                 data.tabs.forEach { stored -> newTab(stored.url.ifEmpty { DemoPolicy.HOME }, select = false)?.title = stored.title }
                 selectedId = tabs[data.tabs.indexOfFirst { it.id == data.activeTabId }.coerceIn(0, tabs.lastIndex)].id
                 bookmarks.addAll(data.bookmarks); history.addAll(data.history)
@@ -762,12 +776,14 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             storage.writeFailed.collect { saveFailed = it }
         }
         refreshExtensions()
+        bottomBackground.start()
     }
 
 
     override fun onCleared() {
         saveImmediately()
         disposed = true
+        bottomBackground.close()
         sitePermissions.cancel(); finder.close()
         files.cancelPrompts()
         answerQuestion(false); cancelInstall(); closePopup()
