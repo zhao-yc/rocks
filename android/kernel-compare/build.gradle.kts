@@ -6,7 +6,6 @@ require(testAbi in setOf("arm64-v8a", "x86_64")) { "只允许手机或独立模�
 android {
     namespace = "org.rocks.kernelcompare"
     compileSdk = 37
-    buildFeatures { resValues = true }
     defaultConfig {
         applicationId = "org.rocks.browser.kerneltest"
         minSdk = 29
@@ -19,12 +18,10 @@ android {
         create("chromium") {
             dimension = "engine"
             applicationIdSuffix = ".chromium"
-            resValue("string", "app_name", "内核对照·Chromium")
         }
         create("gecko") {
             dimension = "engine"
             applicationIdSuffix = ".firefox"
-            resValue("string", "app_name", "内核对照·Firefox")
             ndk { abiFilters += testAbi }
         }
     }
