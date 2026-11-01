@@ -71,7 +71,7 @@
           Math.min(rect.right, left + width) - Math.max(rect.left, left) < width * 0.8) continue;
       if (!visibleBar(element, rect, left, width, top, top + height)) continue;
       const color = background(element);
-      if (color) bars.push({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, color });
+      if (color) bars.push({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, color, position: style.position });
       if (bars.length === 32) break;
     }
     return { documentId, viewport: { left, top, width, height }, bars };

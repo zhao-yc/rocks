@@ -40,7 +40,8 @@ final class BottomBackgroundChecks {
             await("会话恢复", () -> !model.getRestoring());
             navigate("bottom-white"); awaitColor(0xFFFFFFFF); verifyPixel(0xFFFFFFFF);
             navigate("bottom-dark"); awaitColor(0xFF141E28); verifyPixel(0xFF141E28);
-            navigate("bottom-sticky"); awaitColor(0xFFFFFFFF); verifyPixel(0xFFFFFFFF);
+            navigate("bottom-sticky?offset=" + fixedOffsetCss()); awaitColor(0xFFFFFFFF); verifyPixel(0xFFFFFFFF);
+            navigate("bottom-sticky-covered"); SystemClock.sleep(500); awaitColor(null);
             navigate("bottom-none"); SystemClock.sleep(500); awaitColor(null);
             navigate("bottom-obscured"); SystemClock.sleep(500); awaitColor(null);
             navigate("bottom-dynamic"); awaitColor(0xFFFFFFFF); awaitColor(0xFF141E28); awaitColor(null);
@@ -63,6 +64,23 @@ final class BottomBackgroundChecks {
 
     private void awaitColor(Integer expected) {
         await("底色 " + expected, () -> java.util.Objects.equals(expected, model.getBottomBackground().getColor()));
+    }
+
+    /** 夹具按真实工具栏高度安排吸附位置，产品检测不依赖固定 CSS 像素常量。 */
+    private double fixedOffsetCss() throws ReflectiveOperationException {
+        Object bridge = model.getBottomBackground();
+        java.lang.reflect.Field clipping = bridge.getClass().getDeclaredField("clipping"); clipping.setAccessible(true);
+        java.lang.reflect.Field source = bridge.getClass().getDeclaredField("view"); source.setAccessible(true);
+        double[] offset = new double[1];
+        instrumentation.runOnMainSync(() -> {
+            try {
+                org.mozilla.geckoview.GeckoView view = (org.mozilla.geckoview.GeckoView) source.get(bridge);
+                android.graphics.Matrix matrix = new android.graphics.Matrix(); view.getSession().getClientToSurfaceMatrix(matrix);
+                float[] values = new float[9]; matrix.getValues(values);
+                offset[0] = clipping.getInt(bridge) / values[android.graphics.Matrix.MSCALE_Y];
+            } catch (IllegalAccessException error) { throw new AssertionError(error); }
+        });
+        return offset[0];
     }
 
     /** 胶囊外侧像素必须等于衔接底色，防止只改变状态却没有绘制全宽背景。 */

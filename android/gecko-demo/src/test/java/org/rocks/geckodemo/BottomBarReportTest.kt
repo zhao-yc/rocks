@@ -6,7 +6,7 @@ import org.junit.Test
 
 class BottomBarReportTest {
     private fun message() = JSONObject("""{"documentId":"document-1","viewport":{"left":0,"top":0,"width":400,"height":800},
-        "bars":[{"left":0,"top":680,"right":400,"bottom":720,"color":[20,30,40]}]}""")
+        "bars":[{"left":0,"top":680,"right":400,"bottom":720,"color":[20,30,40],"position":"fixed"}]}""")
 
     @Test fun bottomMustMatchActualClippedEdgeRatherThanLayoutViewport() {
         val report = BottomBarReport.parse(message())!!
@@ -32,6 +32,16 @@ class BottomBarReportTest {
         assertNull(report.colorAt(640.0))
         assertNull(report.colorAt(640.0, -80.0))
         assertNull(report.colorAt(640.0, Double.NaN))
+    }
+
+    @Test fun stickyUsesActualGeometryAndCoveredStickyRemainsTransparent() {
+        val json = message()
+        val bar = json.getJSONArray("bars").getJSONObject(0).put("position", "sticky")
+        assertNull(BottomBarReport.parse(json)!!.colorAt(640.0, 80.0))
+        bar.put("top", 600).put("bottom", 640)
+        assertEquals(0xFF141E28.toInt(), BottomBarReport.parse(json)!!.colorAt(640.0, 80.0))
+        bar.put("position", "absolute")
+        assertNull(BottomBarReport.parse(json))
     }
 
     @Test fun rejectsInvalidMessagesWithoutThrowing() {

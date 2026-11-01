@@ -5,7 +5,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-internal data class BottomBarRect(val left: Double, val top: Double, val right: Double, val bottom: Double, val color: Int)
+internal data class BottomBarRect(val left: Double, val top: Double, val right: Double, val bottom: Double, val color: Int, val fixed: Boolean)
 internal data class BottomBarReport(val documentId: String, val left: Double, val top: Double,
     val width: Double, val height: Double, val bars: List<BottomBarRect>) {
     /** 原生端按真实 Gecko 坐标映射得到可用底边，不把 layout viewport 底边当成可见底边。 */
@@ -13,8 +13,10 @@ internal data class BottomBarReport(val documentId: String, val left: Double, va
         if (!visibleBottom.isFinite() || !fixedOffset.isFinite() || fixedOffset < 0 ||
             visibleBottom <= top || visibleBottom > top + height - fixedOffset + 4) return null
         return bars.firstOrNull { bar ->
+            // fixed 由合成器抬高；sticky 的 DOM 几何已经是它的真实位置，不能再抬一次。
+            val offset = if (bar.fixed) fixedOffset else 0.0
             min(bar.right, left + width) - max(bar.left, left) >= width * 0.8 &&
-                bar.top - fixedOffset < visibleBottom && bar.bottom > bar.top && abs(bar.bottom - fixedOffset - visibleBottom) <= 4
+                bar.top - offset < visibleBottom && bar.bottom > bar.top && abs(bar.bottom - offset - visibleBottom) <= 4
         }?.color
     }
 
@@ -37,6 +39,8 @@ internal data class BottomBarReport(val documentId: String, val left: Double, va
             require(array.length() <= 32)
             val bars = (0 until array.length()).map { index ->
                 val bar = array.getJSONObject(index)
+                val position = bar.get("position")
+                require(position == "fixed" || position == "sticky")
                 val rgb = bar.getJSONArray("color")
                 require(rgb.length() == 3)
                 val channels = (0..2).map {
@@ -45,7 +49,7 @@ internal data class BottomBarReport(val documentId: String, val left: Double, va
                     value.toInt()
                 }
                 BottomBarRect(number(bar, "left"), number(bar, "top"), number(bar, "right"), number(bar, "bottom"),
-                    (0xFF shl 24) or (channels[0] shl 16) or (channels[1] shl 8) or channels[2])
+                    (0xFF shl 24) or (channels[0] shl 16) or (channels[1] shl 8) or channels[2], position == "fixed")
             }
             BottomBarReport(id, number(viewport, "left"), number(viewport, "top"), width, height, bars)
         }.getOrNull()
