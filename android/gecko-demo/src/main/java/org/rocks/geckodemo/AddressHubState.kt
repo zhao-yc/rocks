@@ -55,13 +55,18 @@ internal class AddressHubState {
     }
 
     /** 主动切分类先切换输入状态，使随后的键盘隐藏不被当成系统返回。 */
-    fun browse(target: AddressHubPage) { page = target; input = HubInput.NONE; focusVersion++ }
+    fun browse(target: AddressHubPage) {
+        address = address.copy(composition = null)
+        page = target; input = HubInput.NONE; focusVersion++
+    }
     /** 输入框实际获得焦点时同步互斥状态，不修改网址或查询。 */
     fun focus(target: HubInput) { if (input != target) { input = target; focusVersion++ } }
     /** 再次编辑保留原有光标范围，通过版本号重新请求键盘。 */
     fun editAddress() { input = HubInput.ADDRESS; focusVersion++ }
     /** 仅文本变化才启动检索，选择范围变化不会把原网址误判为新输入。 */
     fun changeAddress(value: TextFieldValue) {
+        // 失焦时输入法可能回送折叠选区；分类浏览及其他搜索框不能覆盖已保留的地址草稿。
+        if (input != HubInput.ADDRESS) return
         if (value.text != address.text) { changed = true; error = null }
         address = value
     }

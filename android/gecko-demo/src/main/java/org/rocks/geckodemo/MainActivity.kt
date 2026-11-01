@@ -185,6 +185,7 @@ private fun BrowserScreen(model: BrowserModel) {
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val keyboardVisible = WindowInsets.ime.getBottom(density) > 0
+    SideEffect { model.bottomBackground.setPaused(keyboardVisible || editing) }
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val navigationBottom = WindowInsets.navigationBars.getBottom(density)
     val bottomObscured = toolbarHeight + navigationBottom + with(density) { 16.dp.roundToPx() }
@@ -331,6 +332,7 @@ private fun BrowserScreen(model: BrowserModel) {
                             onOpen = { model.navigate(it) }, onExtensions = { showExtensions = true })
                         else GeckoPage(tab.session, Modifier.fillMaxSize(), if (model.fullScreen) 0 else bottomObscured,
                             protectTopAndSides = !model.fullScreen,
+                            onGeometry = model.bottomBackground::geometry,
                             allowFocus = tab.id == model.selectedId && windowFocused && !editing && !model.finder.visible)
                         if (tab.error) {
                             Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = MaterialTheme.colorScheme.errorContainer) {
@@ -352,8 +354,15 @@ private fun BrowserScreen(model: BrowserModel) {
                     }
                 }
                 SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = with(density) { bottomObscured.toDp() }))
-                if (!model.fullScreen) {
-                    if (!editing) FloatingBrowserToolbar(model, compact,
+            }
+            // 全宽纯色层位于网页上方、工具栏下方；沿用遮挡高度，不改变网页尺寸。
+            if (!model.fullScreen && !keyboardVisible && !editing) model.bottomBackground.color?.let { color ->
+                // Surface 同时阻止触摸穿透，不能点到纯色层下方不可见的网页链接。
+                Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .height(with(density) { bottomObscured.toDp() }), color = Color(color)) {}
+            }
+            if (!model.fullScreen && !editing) {
+                    FloatingBrowserToolbar(model, compact,
                         addressGesture,
                         onAddress = {
                             model.expandToolbar()
@@ -372,9 +381,10 @@ private fun BrowserScreen(model: BrowserModel) {
                             }, shareLabel))
                         },
                         onBarHeight = { toolbarHeight = it },
-                        modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 600.dp).fillMaxWidth()
-                            .navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp))
-                }
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                            .widthIn(max = 600.dp).fillMaxWidth()
+                            .navigationBarsPadding().imePadding().padding(horizontal = 12.dp, vertical = 8.dp))
             }
             if (editing) AddressHub(model, suggestions, snackbar,
                 onSubmit = {
@@ -446,7 +456,8 @@ private fun BrowserScreen(model: BrowserModel) {
 @Composable
 /** 网页与扩展面板沿用独立生命周期；主网页由宿主统一消费顶部安全区。 */
 private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured: Int = 0,
-    protectTopAndSides: Boolean = false, allowFocus: Boolean = true) {
+    protectTopAndSides: Boolean = false, allowFocus: Boolean = true,
+    onGeometry: ((GeckoView, Int) -> Unit)? = null) {
     key(session) {
         AndroidView(factory = { context ->
             SafeGeckoView(context).apply {
@@ -468,6 +479,7 @@ private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured:
             } else if (view.hasFocus()) view.clearFocus()
             // 沿用底部遮挡提示，工具栏收放不会改变网页物理尺寸。
             view.setVerticalClipping(bottomObscured)
+            onGeometry?.invoke(view, bottomObscured)
         }, onReset = null, onRelease = {
             it.releaseSession()
         })

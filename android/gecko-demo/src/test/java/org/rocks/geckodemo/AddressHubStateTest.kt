@@ -30,6 +30,7 @@ class AddressHubStateTest {
         state.historyQuery = "历史"
         state.positions[AddressHubPage.OVERVIEW] = HubScrollPosition(3, 11)
         state.browse(AddressHubPage.BOOKMARKS)
+        state.changeAddress(TextFieldValue("迟到的输入法更新", TextRange.Zero))
         assertEquals(HubInput.NONE, state.input)
         assertFalse(state.showingMatches)
         state.editAddress()

@@ -7,6 +7,7 @@
 - Gecko 主线检查：`node --test scripts/test-gecko-extension.mjs` 与 `gradle -p android/gecko-demo :core:test testDebugUnitTest lintDebug assembleDebug`（JDK 17、Gradle 9.3.1、预装 SDK 37/build-tools 36.0.0）。`main` 推送和 PR 触发 CI，PR 不接触签名 Secret。
 - 原 WebView 回归检查：`gradlew.bat :core:test :android:app:testDebugUnitTest :android:app:lintDebug :android:app:assembleDebug`。仅 JVM 可用时运行 `--configure-on-demand :core:test` 并明确未执行的检查。
 - 不绕过证书，不自动授予网站权限，不添加任意 Intent 跳转或 native JavaScript bridge。未验证隔离前不提供无痕入口。
+- 底栏背景功能例外（所有者已明确授权）：允许独立内置隔离扩展向原生单向上报顶层 HTTP/HTTPS 页面的候选区域、视口尺寸、纯色和文档标识；须校验扩展、会话及文档身份，不接收网页命令、不提供通用桥、不读取正文或表单、不存储或上传检测结果。
 - 不自动安装移动端 SDK、接受新许可或扩大账号权限。CI 构建使用 runner 预装 SDK，下载系统镜像的模拟器任务须显式选择。缺工具时保留真实诊断，不能假报编译运行通过。
 - 会话写入需原子/有序，未知格式保留原件。普通标签共享网站存储；清空历史不能声称清除全部网站数据。
 - 只提交源码、测试、契约与文档；不提交本机路径、凭据、用户浏览记录、签名、日志或生成产物。项目自身许可证尚待所有者选择，不擅自添加。

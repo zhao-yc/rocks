@@ -1,0 +1,15 @@
+{
+  "manifest_version": 2,
+  "name": "Rocks Bottom Background",
+  "version": "1.0.0",
+  "description": "洛克内置底栏背景检测，仅上报布局与纯色，不提供网页原生命令。",
+  "browser_specific_settings": { "gecko": { "id": "bottom-background@rocks.internal" } },
+  "permissions": ["geckoViewAddons", "nativeMessaging", "nativeMessagingFromContent"],
+  "background": { "scripts": ["background.js"] },
+  "content_scripts": [{
+    "matches": ["http://*/*", "https://*/*"],
+    "js": ["content.js"],
+    "all_frames": false,
+    "run_at": "document_idle"
+  }]
+}

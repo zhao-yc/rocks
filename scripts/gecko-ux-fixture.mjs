@@ -88,6 +88,20 @@ const server = http.createServer((request, response) => {
     response.on('close', () => clearTimeout(timer));
     return;
   }
+  if (['/bottom-white', '/bottom-dark', '/bottom-none', '/bottom-dynamic', '/bottom-obscured', '/bottom-sticky', '/bottom-sticky-covered'].includes(route)) {
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    const fixed = route !== '/bottom-none';
+    const color = route === '/bottom-dark' ? '#141e28' : '#ffffff';
+    const requestedOffset = Number(new URL(request.url, 'http://127.0.0.1').searchParams.get('offset') || 0);
+    const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.min(500, requestedOffset)) : 0;
+    response.end(`<!doctype html><html lang="zh-CN"><meta name="viewport" content="width=device-width,initial-scale=1"><title>底栏背景回归</title>
+      <style>body{margin:0;font:20px sans-serif;background:repeating-linear-gradient(#c74b63 0 80px,#386b94 80px 160px)}main{height:5000px;padding:24px}footer{position:fixed;bottom:0;left:0;right:0;height:56px;background:${color};color:#71955b}aside{position:absolute;inset:0;height:6000px;z-index:10;background:#654321}</style>
+      ${route.startsWith('/bottom-sticky') ? `<style>footer{position:sticky;bottom:${offset}px}</style>` : ''}
+      <main>底栏背景回归<input aria-label="网页测试输入框" placeholder="网页测试输入框"><button style="display:block;margin-top:16px;height:48px" onclick="document.documentElement.requestFullscreen()">网页全屏</button></main>${fixed ? '<footer id="bar">网页固定栏</footer>' : ''}
+      ${route === '/bottom-obscured' ? '<aside>遮挡固定栏的普通内容</aside>' : ''}
+      ${route === '/bottom-dynamic' ? '<script>setTimeout(()=>{document.getElementById("bar").style.background="#141e28"},3000);setTimeout(()=>{document.getElementById("bar").remove()},6000);</script>' : ''}</html>`);
+    return;
+  }
   if (!['/one', '/two', '/slow'].includes(route)) { response.writeHead(404); response.end(); return; }
   const name = route === '/two' ? 'Two' : route === '/slow' ? 'Slow' : 'One';
   response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',

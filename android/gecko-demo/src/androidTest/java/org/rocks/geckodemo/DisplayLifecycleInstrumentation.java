@@ -19,6 +19,7 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
     private String dailyActionsUrl;
     private String addressHubUrl;
     private boolean iconsOnly;
+    private String bottomBackgroundUrl;
     @Override
     public void onCreate(final Bundle arguments) {
         super.onCreate(arguments);
@@ -26,6 +27,7 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
         dailyActionsUrl = arguments == null ? null : arguments.getString("daily_actions_url");
         addressHubUrl = arguments == null ? null : arguments.getString("address_hub_url");
         iconsOnly = arguments != null && Boolean.parseBoolean(arguments.getString("icons_only"));
+        bottomBackgroundUrl = arguments == null ? null : arguments.getString("bottom_background_url");
         start();
     }
 
@@ -38,6 +40,12 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
                 AddressHubChecks.verify(this, addressHubUrl, iconsOnly);
                 result.putString("stream", iconsOnly ? "网站图标原生回归：解码、回退、超时、超限、正负缓存、匿名请求及并发上限均通过\n" :
                     "资料面板回归：键盘、全选、分类与草稿、独立搜索、旋转、一次返回、菜单入口、指定恢复及真实网站图标均通过\n");
+                finish(Activity.RESULT_OK, result);
+                return;
+            }
+            if (bottomBackgroundUrl != null) {
+                BottomBackgroundChecks.verify(this, bottomBackgroundUrl);
+                result.putString("stream", "底栏背景回归：白色、深色、吸附、透明、遮挡、动态变色/移除、切标签、刷新与背景像素均通过\n");
                 finish(Activity.RESULT_OK, result);
                 return;
             }
@@ -88,7 +96,7 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
             result.putString("stream", "显示连接生命周期回归：3 项通过\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable failure) {
-            result.putString("stream", (dailyActionsUrl != null ? "日常浏览回归失败：" : "显示连接生命周期回归失败：") + failure + "\n");
+            result.putString("stream", (bottomBackgroundUrl != null ? "底栏背景回归失败：" : dailyActionsUrl != null ? "日常浏览回归失败：" : "显示连接生命周期回归失败：") + failure + "\n");
             finish(Activity.RESULT_CANCELED, result);
         }
     }
