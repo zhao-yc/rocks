@@ -95,8 +95,14 @@ public final class MainActivity extends Activity implements DisplayManager.Displ
             return true;
         });
         displays = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
-        // 每次启动均回到相同离线夹具，不恢复正式浏览器的数据或页面。
-        showTest();
+        // 两种内核都等原生视口完成布局再加载，避免零尺寸或 Surface 初始位置干扰对照。
+        root.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override public void onGlobalLayout() {
+                if (engine.view().getWidth() <= 0 || engine.view().getHeight() <= 0) return;
+                root.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                root.post(() -> { if (!isDestroyed()) showTest(); });
+            }
+        });
         root.post(this::updateInfo);
     }
 
