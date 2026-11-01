@@ -61,6 +61,7 @@ internal object LocalBrowserSearch {
     fun filter(records: List<PageRecord>, query: String): List<PageRecord> =
         records.filter { matches(it.title, it.url, query.trim()) }
 
+    /** 中文按原文匹配，英文字母不区分大小写。 */
     private fun matches(title: String, url: String, query: String): Boolean =
         query.isEmpty() || title.contains(query, ignoreCase = true) || url.contains(query, ignoreCase = true)
 }
@@ -115,7 +116,9 @@ internal class PageLoadState {
         private set
     private var stopped = false
 
+    /** 新请求开始时废弃上一次停止与错误状态。 */
     fun start() { loading = true; error = false; stopped = false }
+    /** 保留停止标记，供迟到的页面结束回调识别用户取消。 */
     fun stop() { loading = false; error = false; stopped = true }
     /** 只有真实完成的网页可以写入历史；停止后的迟到回调不制造访问记录。 */
     fun finish(success: Boolean): Boolean {

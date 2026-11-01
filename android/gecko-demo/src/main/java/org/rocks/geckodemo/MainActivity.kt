@@ -120,6 +120,8 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
     }
     val context = LocalContext.current
     val shareLabel = stringResource(R.string.share)
+    val tabClosedLabel = stringResource(R.string.tab_closed)
+    val undoLabel = stringResource(R.string.undo)
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var showExtensions by remember { mutableStateOf(false) }
@@ -278,8 +280,8 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
     }
     LaunchedEffect(model.closeNotice) {
         model.closeNotice?.let { closed ->
-            val result = snackbar.showSnackbar(context.getString(R.string.tab_closed),
-                actionLabel = context.getString(R.string.undo), duration = SnackbarDuration.Long)
+            val result = snackbar.showSnackbar(tabClosedLabel,
+                actionLabel = undoLabel, duration = SnackbarDuration.Long)
             if (result == SnackbarResult.ActionPerformed) model.reopenClosedTab(closed.closureId)
             model.dismissCloseNotice(closed.closureId)
         }
