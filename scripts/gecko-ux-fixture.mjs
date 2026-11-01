@@ -25,6 +25,10 @@ for (let row = 0; row < 64; row++) for (let col = 0; col < 64; col++) {
 }
 const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', header),
   pngChunk('IDAT', deflateSync(pixels)), pngChunk('IEND', Buffer.alloc(0))]);
+const bluePixels = Buffer.from(pixels);
+for (let row = 0; row < 64; row++) for (let col = 0; col < 64; col++) bluePixels.set([45, 105, 200, 255], row * 257 + 1 + col * 4);
+const bluePng = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', header),
+  pngChunk('IDAT', deflateSync(bluePixels)), pngChunk('IEND', Buffer.alloc(0))]);
 const icoHeader = Buffer.alloc(22); icoHeader.writeUInt16LE(1, 2); icoHeader.writeUInt16LE(1, 4);
 icoHeader[6] = 64; icoHeader[7] = 64; icoHeader.writeUInt16LE(1, 10); icoHeader.writeUInt16LE(32, 12);
 icoHeader.writeUInt32LE(png.length, 14); icoHeader.writeUInt32LE(22, 18);
@@ -53,7 +57,7 @@ function iconRoute(request, response, negative = false) {
   response.setHeader('Cache-Control', 'no-store');
   if (route.startsWith('/icon-case/')) {
     const name = route.split('/')[2];
-    const target = ({ png: '/icons/green.png', ico: '/icons/green.ico', relative: '../../icons/green.png',
+    const target = ({ png: '/icons/green.png', blue: '/icons/blue.png', ico: '/icons/green.ico', relative: '../../icons/green.png',
       redirect: '/icons/redirect', loop: '/icons/loop', timeout: '/icons/slow', oversized: '/icons/oversized',
       broken: '/icons/broken', failure: '/icons/broken', parallel: '/icons/wait' })[name];
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -66,8 +70,8 @@ function iconRoute(request, response, negative = false) {
     response.on('close', () => clearTimeout(timer));
   } else if (route === '/icons/oversized') { response.end(Buffer.alloc(256 * 1024 + 1)); }
   else if (route === '/icons/broken') { response.end('无法解码的测试图标'); }
-  else if (route === '/icons/green.png' || route === '/favicon.ico') {
-    response.writeHead(200, { 'Content-Type': 'image/png' }); response.end(png);
+  else if (route === '/icons/green.png' || route === '/favicon.ico' || route === '/icons/blue.png') {
+    response.writeHead(200, { 'Content-Type': 'image/png' }); response.end(route === '/icons/blue.png' ? bluePng : png);
   } else if (route === '/icons/green.ico') {
     response.writeHead(200, { 'Content-Type': 'image/x-icon' }); response.end(ico);
   } else { response.writeHead(404); response.end(); }

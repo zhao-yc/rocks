@@ -144,6 +144,65 @@ internal object AddressHubChecks {
             check(!result.getBoolean("sensitive")) { "图标请求携带了 Cookie、认证或来源地址" }
             check(result.getInt("maximumActive") == 2) { "图标实际并发异常：${result.getInt("maximumActive")}" }
             check(result.getJSONObject("paths").getInt("/icons/loop") == 4) { "没有执行重定向上限" }
+            lateRowCheck(run)
+        }
+
+        /** 删除正在请求慢图标的行，再核对新行的蓝色像素，迟到的绿色图标不得覆盖它。 */
+        private fun lateRowCheck(run: Long) {
+            val previous = stats().getJSONObject("paths").optInt("/icons/slow")
+            main {
+                model.bookmarks.clear()
+                model.bookmarks.add(PageRecord(base + "icon-case/timeout?late=$run", "迟到图标", 0))
+                model.addressHub.open(model.selectedId, model.current.url, AddressHubPage.BOOKMARKS, edit = false)
+            }
+            var started = false
+            for (attempt in 0 until 80) {
+                if (stats().getJSONObject("paths").optInt("/icons/slow") > previous) { started = true; break }
+                SystemClock.sleep(100)
+            }
+            check(started) { "慢速图标没有实际开始请求" }
+            main {
+                model.bookmarks.clear()
+                model.bookmarks.add(PageRecord(base + "icon-case/blue?late=$run", "替换后的图标", 0))
+            }
+            awaitBlueIcon()
+            var ended = false
+            for (attempt in 0 until 100) {
+                if (stats().getInt("active") == 0) { ended = true; break }
+                SystemClock.sleep(100)
+            }
+            check(ended) { "迟到图标连接没有结束" }
+            awaitBlueIcon()
+            check(stats().getInt("maximumActive") <= 2) { "取消可见订阅后超出了网络并发上限" }
+            click(inst.targetContext.getString(R.string.cancel))
+            await("图标验收退出面板") { !model.addressHub.visible }
+        }
+
+        /** 只检查合成夹具图块的像素，不保存屏幕或读取真实网页内容。 */
+        private fun awaitBlueIcon() {
+            repeat(100) {
+                var row: AccessibilityNodeInfo? = node { it.text?.toString() == "替换后的图标" }
+                while (row != null && !row.isClickable) row = row.parent
+                val bounds = android.graphics.Rect()
+                row?.getBoundsInScreen(bounds)
+                val density = main { activity.resources.displayMetrics.density }
+                val capture = inst.uiAutomation.takeScreenshot()
+                try {
+                    if (capture != null && !bounds.isEmpty) {
+                        val x = bounds.left + (36 * density).toInt()
+                        val y = bounds.centerY()
+                        if (x in 0 until capture.width && y in 0 until capture.height) {
+                            val pixel = capture.getPixel(x, y)
+                            // 容许系统色彩转换的微小差异，绿色迟到图标仍必然无法通过。
+                            if (kotlin.math.abs(android.graphics.Color.red(pixel) - 45) <= 3 &&
+                                kotlin.math.abs(android.graphics.Color.green(pixel) - 105) <= 3 &&
+                                kotlin.math.abs(android.graphics.Color.blue(pixel) - 200) <= 3) return
+                        }
+                    }
+                } finally { capture?.recycle() }
+                SystemClock.sleep(100)
+            }
+            error("替换后的行没有显示自己的真实蓝色图标")
         }
 
         /** 在主线程订阅仓库，在 instrumentation 工作线程等待，不能阻塞 Gecko 的主线程回调。 */
