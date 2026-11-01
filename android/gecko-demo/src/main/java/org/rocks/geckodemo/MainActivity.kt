@@ -247,13 +247,18 @@ private fun BrowserScreen(model: BrowserModel) {
                 }
             })
 
-    LaunchedEffect(model.selectedId, model.tabs.size, current.url == DemoPolicy.HOME, draggingTabs) {
+    val pageOutOfSync by remember(model, pager) { derivedStateOf {
+        val target = model.tabs.indexOfFirst { it.id == model.selectedId }
+        target >= 0 && (pager.currentPage != target || pager.currentPageOffsetFraction != 0f)
+    } }
+    LaunchedEffect(model.selectedId, model.tabs.size, current.url == DemoPolicy.HOME, draggingTabs, pageOutOfSync) {
         // 模型选择不能因上一段动画尚未结束而被永久跳过；手势结束后再对齐实际内容页。
         // 程序切换立即落在目标页，地址栏拖动仍由原来的跟手动画处理。
         if (draggingTabs) return@LaunchedEffect
         val index = model.tabs.indexOfFirst { it.id == model.selectedId }
         // 插入/删除后旧的稳定 key 会在下一次布局继续移动页码，即使当前页码看起来已经相等。
-        // 首页与网页互换时也要重设锚点；请求下一次布局对齐，避免立即测量仍使用旧的数据数量。
+        // 首页与网页互换、迟到的焦点滚动也可能移动分页；只观察是否失配，避免每帧重组整个界面。
+        // 请求下一次布局对齐，避免立即测量仍使用旧的数据数量。
         if (index >= 0) pager.requestScrollToPage(index)
     }
     LaunchedEffect(model.notice) {
