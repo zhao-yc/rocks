@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Rocks · Gecko</string>
+    <string name="app_name">Rocks</string>
     <string name="home">Start page</string>
     <string name="back">Back</string>
     <string name="forward">Forward</string>

@@ -360,7 +360,7 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
                 TextButton(onClick = { model.openLink(false) }) { Text(stringResource(R.string.open_new_tab)) }
                 TextButton(onClick = { model.openLink(true) }) { Text(stringResource(R.string.open_background)) }
                 TextButton(onClick = {
-                    (context.getSystemService(ClipboardManager::class.java)).setPrimaryClip(ClipData.newPlainText("Rocks", target.url))
+                    (context.getSystemService(ClipboardManager::class.java)).setPrimaryClip(ClipData.newPlainText(context.getString(R.string.app_name), target.url))
                     model.linkMenu = null; model.notify(R.string.link_copied)
                 }) { Text(stringResource(R.string.copy_link)) }
                 TextButton(onClick = {
