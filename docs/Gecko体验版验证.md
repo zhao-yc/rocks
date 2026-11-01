@@ -1,3 +1,15 @@
+# Gecko 0.4.5 顶部模糊透明渐变（2026-11-01）
+
+- 用户确认目标为本轮带灵动岛的图2：网页颜色模糊透出，顶部下缘逐渐透明。增加模糊纹理可见度及 18dp 透明尾部，回顶消退，不改变网页位置、顶部安全区、底栏或触摸路径。
+- 实际截图暴露原取样路径返回 `ERROR_SOURCE_NO_DATA (3)`，纹理始终为空。补充真实 TextureView 帧更新驱动及受限分辨率备用读取；优先局部 PixelCopy，失败时最多读取 128×384 缩略图并立即裁出顶部、回收整图。不读应用窗口，保留 67ms 限频、单一在途与迟到结果隔离，不新增网页脚本、桥或权限。
+- 本机 8 项顶部策略与 2 项扩展脚本测试通过。[取样修复及原生模拟器构建](https://github.com/zhao-yc/rocks/actions/runs/41267998018)、发布源码 `2c999032bdf662b54f854b7a10f08c2611991893` 的 [main 完整 Gecko CI](https://github.com/zhao-yc/rocks/actions/runs/41268458379) 均成功，含 `:core:test testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` 与固定签名。
+- 无脚本 CSS 动画夹具的设备对照：旧取样实现为 0 帧、回归失败；修复后的原生 x86_64 包与实际 ARM64 手机包均收到至少 3 帧独立处理纹理、返回码 `-1`。ARM64 的 3 项显示连接释放回归同样通过，保留 0.4.4 闪退修复。
+- 原生模拟器实际检查百度同位置滚动、蓝色按钮与图标的模糊延展、透明尾部、回顶消退、英纵菜单打开/关闭、滚动、旋转和后台返回，无新增崩溃。手机首帧、挖孔、渐变强度及流畅度仍待用户确认。
+- 版本 `0.4.5-gecko` / versionCode 9，沿用包名与固定证书。[发布校验](https://github.com/zhao-yc/rocks/actions/runs/41268665688) 成功，核对来源、签名、包名、版本、引擎、ZIP 摘要，上传后完整重下载核验再公开。
+- [下载 APK](https://github.com/zhao-yc/rocks/releases/download/v0.4.5-gecko/rocks-gecko-0.4.5.apk)：165006235 字节，SHA-256 `fa67e88a7d4aa8ed21cccd80937441e7ad73674fda03bb3c0e451356075b4ccf`，与本机实际安装测试的 ARM64 包相同；匿名下载文件头及摘要核验通过。固定证书不变，未生成或复制私钥，未安装新 SDK/镜像或接受新许可。
+
+---
+
 # Gecko 0.4.4 闪退修复与本机模拟器验证（2026-11-01）
 
 - 用户报告手机闪退后，在本机已有 Android 15 / API 35 镜像安装公开 0.4.3，复现网页切换和标签恢复中的主线程空指针。根因为 Kotlin 覆写 `releaseDisplay` 的非空检查拒绝了 GeckoView 实际传入的空连接；改用 Java 保留引擎运行时契约及所有权校验。
