@@ -17,11 +17,13 @@ import org.mozilla.geckoview.ScreenLength;
 public final class DisplayLifecycleInstrumentation extends Instrumentation {
     private String safeAreaUrl;
     private String dailyActionsUrl;
+    private String bottomBackgroundUrl;
     @Override
     public void onCreate(final Bundle arguments) {
         super.onCreate(arguments);
         safeAreaUrl = arguments == null ? null : arguments.getString("safe_area_url");
         dailyActionsUrl = arguments == null ? null : arguments.getString("daily_actions_url");
+        bottomBackgroundUrl = arguments == null ? null : arguments.getString("bottom_background_url");
         start();
     }
 
@@ -30,6 +32,12 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
     public void onStart() {
         final Bundle result = new Bundle();
         try {
+            if (bottomBackgroundUrl != null) {
+                BottomBackgroundChecks.verify(this, bottomBackgroundUrl);
+                result.putString("stream", "底栏背景回归：白色、深色、透明、遮挡、动态变色/移除、切标签、刷新与背景像素均通过\n");
+                finish(Activity.RESULT_OK, result);
+                return;
+            }
             if (dailyActionsUrl != null) {
                 DailyBrowserActionsChecks.verify(this, dailyActionsUrl);
                 result.putString("stream", "日常浏览回归：末页恢复、桌面模式、程序关闭、标签上限、停止、真实失败、输入反馈、新建聚焦及标签匹配均通过\n");
@@ -77,7 +85,7 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
             result.putString("stream", "显示连接生命周期回归：3 项通过\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable failure) {
-            result.putString("stream", (dailyActionsUrl != null ? "日常浏览回归失败：" : "显示连接生命周期回归失败：") + failure + "\n");
+            result.putString("stream", (bottomBackgroundUrl != null ? "底栏背景回归失败：" : dailyActionsUrl != null ? "日常浏览回归失败：" : "显示连接生命周期回归失败：") + failure + "\n");
             finish(Activity.RESULT_CANCELED, result);
         }
     }
