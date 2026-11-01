@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="address_hint">URL, e.g. https://www.baidu.com</string>
+    <string name="open">Open</string>
+    <string name="test_page">Local test</string>
+    <string name="back">Back</string>
+    <string name="reload">Reload</string>
+    <string name="invalid_address">Enter an HTTP or HTTPS URL</string>
+    <string name="load_error">Page failed to load; check the URL or network</string>
+    <string name="engine_info">%1$s\nSystem reports: %2$.1f Hz · No app refresh-rate request</string>
+</resources>

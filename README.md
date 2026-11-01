@@ -88,3 +88,7 @@ Android session reads and writes are limited to 4 MiB of UTF-8. Unreadable, malf
 - [ArkWeb page loading](https://github.com/openharmony/docs/blob/master/en/application-dev/web/web-page-loading-with-web-components.md)
 
 Dependencies retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
+
+## Minimal engine comparison APKs
+
+A separate [minimal diagnostic project](android/kernel-compare/README.md) builds Chromium/System WebView and Firefox/GeckoView APKs with the same native UI and offline frame-pacing page. Both can be installed beside Rocks. The experiments do not change the main browser or claim measured high-refresh-rate phone acceptance.

@@ -1,0 +1,95 @@
+name: Minimal kernel comparison
+on:
+  push:
+    branches: ['main', 'codex/minimal-kernel-comparison']
+    paths: ['android/kernel-compare/**', 'scripts/test-kernel-comparison.mjs', 'scripts/android_signing.py', 'android/development-signing.sha256', '.github/workflows/kernel-comparison.yml']
+  pull_request:
+    branches: ['main']
+    paths: ['android/kernel-compare/**', 'scripts/test-kernel-comparison.mjs', '.github/workflows/kernel-comparison.yml']
+permissions:
+  contents: read
+concurrency:
+  group: kernel-comparison-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: 核对预装 SDK
+        run: |
+          test -d "$ANDROID_HOME/platforms/android-37.0" || test -d "$ANDROID_HOME/platforms/android-37"
+          test -x "$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          test -x "$ANDROID_HOME/build-tools/36.0.0/aapt"
+      - name: 准备已有固定开发签名
+        id: signing
+        if: github.event_name != 'pull_request'
+        env:
+          ROCKS_ANDROID_SIGNING: ${{ secrets.ROCKS_ANDROID_SIGNING }}
+        run: python3 scripts/android_signing.py prepare --require
+      - name: 测试帧率估算
+        run: node --test scripts/test-kernel-comparison.mjs
+      - name: 双内核测试、lint 和手机包构建
+        run: gradle -p android/kernel-compare testChromiumDebugUnitTest testGeckoDebugUnitTest lintChromiumDebug lintGeckoDebug assembleChromiumDebug assembleGeckoDebug --stacktrace
+      - name: 核对签名、包名与相同网页内容
+        if: steps.signing.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          export CHROMIUM_APK=android/kernel-compare/build/outputs/apk/chromium/debug/rocks-kernel-comparison-chromium-debug.apk
+          export GECKO_APK=android/kernel-compare/build/outputs/apk/gecko/debug/rocks-kernel-comparison-gecko-debug.apk
+          python3 scripts/android_signing.py verify --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner" --apk "$CHROMIUM_APK" --apk "$GECKO_APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$CHROMIUM_APK" | grep "package: name='org.rocks.browser.kerneltest.chromium'"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$GECKO_APK" | grep "package: name='org.rocks.browser.kerneltest.firefox'"
+          python3 - <<'PY'
+          import hashlib, os, zipfile
+          from pathlib import Path
+          apks = [Path(os.environ['CHROMIUM_APK']), Path(os.environ['GECKO_APK'])]
+          with zipfile.ZipFile(apks[0]) as chromium, zipfile.ZipFile(apks[1]) as gecko:
+              for name in ('assets/test-page.html', 'assets/frame-meter.js'):
+                  assert chromium.read(name) == gecko.read(name), '两份测试网页内容不同'
+              abis = {name.split('/')[1] for name in gecko.namelist() if name.startswith('lib/') and name.endswith('.so')}
+              assert abis == {'arm64-v8a'}, abis
+          Path('android/kernel-compare/build/phone-sha256.txt').write_text(''.join(
+              hashlib.sha256(apk.read_bytes()).hexdigest() + '  ' + apk.name + '\n' for apk in apks))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: steps.signing.outputs.configured == 'true'
+        with:
+          name: kernel-comparison-phones
+          path: |
+            android/kernel-compare/build/outputs/apk/chromium/debug/*.apk
+            android/kernel-compare/build/outputs/apk/gecko/debug/*.apk
+            android/kernel-compare/build/phone-sha256.txt
+          retention-days: 14
+      - name: 构建独立模拟器 Gecko 包
+        if: steps.signing.outputs.configured == 'true'
+        run: |
+          gradle -p android/kernel-compare -PkernelTestAbi=x86_64 assembleGeckoDebug --stacktrace
+          APK=android/kernel-compare/build/outputs/apk/gecko/debug/rocks-kernel-comparison-gecko-debug.apk
+          python3 scripts/android_signing.py verify --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner" --apk "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | grep "native-code: 'x86_64'"
+      - uses: actions/upload-artifact@v4
+        if: steps.signing.outputs.configured == 'true'
+        with:
+          name: kernel-comparison-emulator
+          path: android/kernel-compare/build/outputs/apk/gecko/debug/*.apk
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kernel-comparison-reports
+          path: |
+            android/kernel-compare/build/reports/
+            android/kernel-compare/build/test-results/
+      - name: 清理临时私钥
+        if: always()
+        run: |
+          if [ -n "${ROCKS_ANDROID_KEYSTORE:-}" ]; then rm -f -- "$ROCKS_ANDROID_KEYSTORE"; fi
