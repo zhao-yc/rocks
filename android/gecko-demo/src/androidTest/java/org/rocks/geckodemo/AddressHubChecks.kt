@@ -337,6 +337,8 @@ internal object AddressHubChecks {
         private fun setText(value: String) {
             val arguments = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value) }
             check(editable().performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) { "无法设置原生输入" }
+            // 模型先更新、原生语义随后更新；旧节点的选区动作会把旧网址一并写回。
+            node { it.packageName?.toString() == inst.targetContext.packageName && it.isEditable && it.isFocused && it.text?.toString() == value }
         }
     }
 }
