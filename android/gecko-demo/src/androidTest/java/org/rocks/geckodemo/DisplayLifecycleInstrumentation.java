@@ -18,12 +18,14 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
     private String safeAreaUrl;
     private String dailyActionsUrl;
     private String addressHubUrl;
+    private boolean iconsOnly;
     @Override
     public void onCreate(final Bundle arguments) {
         super.onCreate(arguments);
         safeAreaUrl = arguments == null ? null : arguments.getString("safe_area_url");
         dailyActionsUrl = arguments == null ? null : arguments.getString("daily_actions_url");
         addressHubUrl = arguments == null ? null : arguments.getString("address_hub_url");
+        iconsOnly = arguments != null && Boolean.parseBoolean(arguments.getString("icons_only"));
         start();
     }
 
@@ -33,8 +35,9 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
         final Bundle result = new Bundle();
         try {
             if (addressHubUrl != null) {
-                AddressHubChecks.verify(this, addressHubUrl);
-                result.putString("stream", "资料面板回归：键盘、全选、分类与草稿、独立搜索、旋转、一次返回、菜单入口、指定恢复及真实网站图标均通过\n");
+                AddressHubChecks.verify(this, addressHubUrl, iconsOnly);
+                result.putString("stream", iconsOnly ? "网站图标原生回归：解码、回退、超时、超限、正负缓存、匿名请求及并发上限均通过\n" :
+                    "资料面板回归：键盘、全选、分类与草稿、独立搜索、旋转、一次返回、菜单入口、指定恢复及真实网站图标均通过\n");
                 finish(Activity.RESULT_OK, result);
                 return;
             }

@@ -129,7 +129,9 @@ internal fun AddressHub(model: BrowserModel, suggestions: List<AddressSuggestion
                             } else Spacer(Modifier.width(12.dp))
                         }
                     }
-                    FilledTonalIconButton(onClick = onClose, modifier = Modifier.size(56.dp), shape = CircleShape) {
+                    FilledTonalIconButton(onClick = onClose, modifier = Modifier.size(56.dp), shape = CircleShape,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface)) {
                         Icon(Icons.Outlined.Close, stringResource(R.string.cancel))
                     }
                 }

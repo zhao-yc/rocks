@@ -26,11 +26,11 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** 显式、隔离的原生面板验收，只可在本机夹具与专用模拟器上运行。 */
 internal object AddressHubChecks {
-    @JvmStatic fun verify(instrumentation: Instrumentation, base: String) {
+    @JvmStatic fun verify(instrumentation: Instrumentation, base: String, iconsOnly: Boolean) {
         check(Build.HARDWARE in listOf("ranchu", "goldfish") && base == "http://127.0.0.1:8878/") {
             "资料面板回归仅允许专用模拟器与指定回环夹具"
         }
-        Checks(instrumentation, base).run()
+        Checks(instrumentation, base).run(iconsOnly)
     }
 
     private class Checks(val inst: Instrumentation, val base: String) {
@@ -39,13 +39,14 @@ internal object AddressHubChecks {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
         /** 同时验证真正的输入焦点、视图几何、配置重建与网站图标。 */
-        fun run() {
+        fun run(iconsOnly: Boolean) {
             activity = inst.startActivitySync(Intent(Intent.ACTION_VIEW, Uri.parse(base + "one"))
                 .setClass(inst.targetContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             val getter = MainActivity::class.java.getDeclaredMethod("getBrowser").apply { isAccessible = true }
             model = main { getter.invoke(activity) as BrowserModel }
             try {
                 await("夹具网页加载") { !model.restoring && model.current.url == base + "one" && !model.current.loading }
+                if (iconsOnly) { iconChecks(); return }
                 main {
                     model.closeOtherTabs(); model.clearClosedTabs()
                     model.bookmarks.clear()
@@ -55,8 +56,7 @@ internal object AddressHubChecks {
                 val dimensions = main { original.width to original.height }
                 click("127.0.0.1")
                 await("首次键盘与面板") { model.addressHub.visible && ime() }
-                val field = editable()
-                check(field.textSelectionStart == 0 && field.textSelectionEnd == field.text?.length) { "首次进入没有全选实际网址" }
+                awaitSelectedAddress()
                 main { check(gecko(activity.window.decorView, model.current.session) === original &&
                     (original.width to original.height) == dimensions) { "面板或键盘改变了原网页视图" } }
                 setText("面板草稿")
@@ -202,7 +202,19 @@ internal object AddressHubChecks {
             error("未找到原生资料面板控件")
         }
 
-        private fun editable() = node { it.isEditable && it.isFocused }
+        private fun editable() = node { it.packageName?.toString() == inst.targetContext.packageName && it.isEditable && it.isFocused }
+
+        /** 输入法可见不等于无障碍选区事件已经送达，等待实际原生选区稳定而不是固定延迟。 */
+        private fun awaitSelectedAddress() {
+            var observed = "无选区"
+            repeat(50) {
+                val field = editable()
+                observed = "${field.textSelectionStart}:${field.textSelectionEnd}/${field.text?.length}"
+                if (field.textSelectionStart == 0 && field.textSelectionEnd == field.text?.length) return
+                SystemClock.sleep(100)
+            }
+            error("首次网址未全选：原生选区 $observed；模型选区 ${main { model.addressHub.address.selection }}")
+        }
         private fun click(label: String) {
             var target: AccessibilityNodeInfo? = node { it.text?.toString() == label || it.contentDescription?.toString() == label }
             while (target != null && !target.isClickable) target = target.parent
