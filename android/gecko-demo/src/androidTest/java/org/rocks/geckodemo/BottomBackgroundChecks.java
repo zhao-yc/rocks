@@ -129,6 +129,15 @@ final class BottomBackgroundChecks {
                         android.graphics.Matrix matrix = new android.graphics.Matrix(); view.getSession().getClientToScreenMatrix(matrix);
                         int[] origin = new int[2]; view.getLocationOnScreen(origin);
                         result.append("height=").append(view.getHeight()).append(";originY=").append(origin[1]).append(";matrix=").append(matrix.toShortString());
+                        // 同时记录产品实际使用的表面矩阵，区分报告错误与合成几何尚未同步。
+                        view.getSession().getClientToSurfaceMatrix(matrix);
+                        android.graphics.Matrix inverse = new android.graphics.Matrix();
+                        result.append(";surface=").append(matrix.toShortString());
+                        if (matrix.invert(inverse)) {
+                            java.lang.reflect.Field clip = bridge.getClass().getDeclaredField("clipping"); clip.setAccessible(true);
+                            float[] bottom = {0, view.getHeight() - clip.getInt(bridge), 0, view.getHeight()}; inverse.mapPoints(bottom);
+                            result.append(";mapped=").append(java.util.Arrays.toString(bottom));
+                        }
                     }
                 }
             } catch (ReflectiveOperationException error) { result.append(error); }
