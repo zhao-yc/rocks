@@ -1,6 +1,16 @@
 # Rocks Gecko development preview
 
-The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.6-gecko (code 10) can update the existing Gecko preview without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
+The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.7-gecko (code 11) can update the existing Gecko preview without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
+
+## 0.4.7 transparent comparison build
+
+This build removes the top blur and fade overlay, TextureView/PixelCopy capture, compositor draw subscriptions, texture listener wrappers and blur processing. It also removes scroll-position state and native view translation used only by the effect. The status bar remains transparent over a fixed light app background with dark icons. Web content stays below the top safe area throughout scrolling, with horizontal cutouts protected. Home, loading and error UI consume the top inset only once; website fullscreen removes the host inset and restores it on exit.
+
+GeckoView, the TextureView backend, refresh-rate policy, toolbar gestures and the portable data contract remain unchanged. This isolates the removed top effect for comparison with the previous APK; it does not prove that the effect caused the reported jank. The previous scroll-under-status-bar behavior is intentionally disabled.
+
+The instrumentation runner accepts -e safe_area_url <long-fixture-url> to verify initial top safety, stable viewport geometry during a native Gecko scroll, and return to the top. The old render_url and underlay_url texture tests are removed. Without an argument, the three real Gecko display-release checks still run.
+
+Compare slow dragging, fast swipes and inertial scrolling on the same pages and phone settings. Also check tab switching, rotation, background/resume, keyboard, top website controls, Dark Reader and fullscreen/return. Build or emulator results cannot establish phone smoothness.
 
 ## 0.4.4 display lifecycle crash fix
 
