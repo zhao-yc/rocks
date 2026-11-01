@@ -6,6 +6,7 @@ require(testAbi in setOf("arm64-v8a", "x86_64")) { "只允许手机或独立模�
 android {
     namespace = "org.rocks.kernelcompare"
     compileSdk = 37
+    buildFeatures { resValues = true }
     defaultConfig {
         applicationId = "org.rocks.browser.kerneltest"
         minSdk = 29
