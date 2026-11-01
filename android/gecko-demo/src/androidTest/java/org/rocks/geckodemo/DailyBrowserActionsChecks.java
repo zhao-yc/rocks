@@ -169,6 +169,7 @@ final class DailyBrowserActionsChecks {
             Rect visible = new Rect();
             boolean inWindow = view.getGlobalVisibleRect(visible);
             return "网页视图[匹配=" + (((GeckoView) view).getSession() == selected) + ",显示=" + view.isShown() +
+                    ",可聚焦=" + view.isFocusable() + ",焦点=" + view.hasFocus() +
                     ",尺寸=" + view.getWidth() + "x" + view.getHeight() + ",窗口内=" + inWindow + ",矩形=" + visible + "]";
         }
         StringBuilder children = new StringBuilder();

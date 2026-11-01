@@ -321,7 +321,8 @@ private fun BrowserScreen(model: BrowserModel) {
                         if (tab.url == DemoPolicy.HOME) HomeScreen(model,
                             onOpen = { model.navigate(it) }, onExtensions = { showExtensions = true })
                         else GeckoPage(tab.session, Modifier.fillMaxSize(), if (model.fullScreen) 0 else bottomObscured,
-                            protectTopAndSides = !model.fullScreen)
+                            protectTopAndSides = !model.fullScreen,
+                            allowFocus = tab.id == model.selectedId && windowFocused && !editing && !model.finder.visible)
                         if (tab.error) {
                             Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = MaterialTheme.colorScheme.errorContainer) {
                                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -446,16 +447,24 @@ private fun BrowserScreen(model: BrowserModel) {
 @Composable
 /** 网页与扩展面板沿用独立生命周期；主网页由宿主统一消费顶部安全区。 */
 private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured: Int = 0,
-    protectTopAndSides: Boolean = false) {
+    protectTopAndSides: Boolean = false, allowFocus: Boolean = true) {
     key(session) {
         AndroidView(factory = { context ->
             SafeGeckoView(context).apply {
+                // Gecko 会异步恢复原生焦点；预加载的相邻页不能参与焦点搜索。
+                isFocusable = false
+                isFocusableInTouchMode = false
                 this.protectTopAndSides = protectTopAndSides
                 setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
                 setSession(session)
             }
         }, modifier = modifier, update = { view ->
             view.protectTopAndSides = protectTopAndSides
+            view.isFocusableInTouchMode = allowFocus
+            view.isFocusable = allowFocus
+            if (allowFocus) {
+                if (!view.hasFocus()) view.requestFocus()
+            } else if (view.hasFocus()) view.clearFocus()
             // 沿用底部遮挡提示，工具栏收放不会改变网页物理尺寸。
             view.setVerticalClipping(bottomObscured)
         }, onReset = null, onRelease = {
