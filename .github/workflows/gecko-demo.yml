@@ -7,6 +7,11 @@ on:
     branches: ['main']
     paths: ['android/gecko-demo/**', 'android/app/src/**', 'android/development-signing.sha256', 'core/**', 'shared/**', 'scripts/**', 'settings.gradle.kts', '.github/workflows/gecko-demo.yml']
   workflow_dispatch:
+    inputs:
+      build_emulator_apk:
+        description: '另外构建 x86_64 模拟器验证包（不下载系统镜像，不公开发布）'
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -61,6 +66,27 @@ jobs:
         with:
           name: rocks-gecko-lifecycle-test-apk
           path: android/gecko-demo/build/outputs/apk/androidTest/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
+      - name: Assemble opt-in native emulator APK
+        if: github.event_name == 'workflow_dispatch' && inputs.build_emulator_apk
+        run: |
+          # 只在已归档手机包后临时替换构建架构，运行时代码保持一致。
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('android/gecko-demo/build.gradle.kts')
+          text = path.read_text()
+          assert text.count('abiFilters += "arm64-v8a"') == 1
+          path.write_text(text.replace('abiFilters += "arm64-v8a"', 'abiFilters += "x86_64"'))
+          PY
+          gradle -p android/gecko-demo assembleDebug --stacktrace
+          python3 scripts/android_signing.py verify --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner" --apk android/gecko-demo/build/outputs/apk/debug/rocks-gecko-demo-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging android/gecko-demo/build/outputs/apk/debug/rocks-gecko-demo-debug.apk | grep "native-code: 'x86_64'"
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch' && inputs.build_emulator_apk
+        with:
+          name: rocks-gecko-emulator-apk
+          path: android/gecko-demo/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
       - name: Remove private signing material
