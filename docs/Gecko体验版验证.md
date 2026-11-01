@@ -1,3 +1,19 @@
+# Gecko 0.4.7 顶部透明对照版（2026-11-01）
+
+- 用户已开启高刷，反馈两款浏览器均显示高刷新率，主要是网页滚动不流畅、工具栏动画正常。本版本去掉顶部效果做对照，不将系统刷新率等同于网页实际出帧率。
+- 删除顶部模糊和渐隐绘制、PixelCopy/TextureView 读取、帧订阅、取色与模糊任务、顶部专用滚动状态及网页平移。保留顶部和两侧安全区、底栏滚动策略、Gecko 版本及 TextureView 后端；状态栏透明，下方为浅色应用底色，图标为深色。
+- 顺带修复最新基线复制链接时通过 LocalContext 读取应用名引起的 Compose lint 错误，改用 stringResource，没有跳过检查。
+- 运行时源码提交为 bde5f20；[该提交 main 完整 CI](https://github.com/zhao-yc/rocks/actions/runs/41286766498) 已通过。后续测试修正提交 e1a3683 与该提交的 src/main、构建配置、core、shared 无差异。[最终测试修正构建](https://github.com/zhao-yc/rocks/actions/runs/41287311913) 已通过全部检查及固定签名；[最终 main 完整 CI](https://github.com/zhao-yc/rocks/actions/runs/41287715838) 也已全部通过。
+- CI 实际检查：node --test scripts/test-gecko-extension.mjs（2 项通过）；node scripts/sync-brand-icons.mjs --check；gradle -p android/gecko-demo :core:test testDebugUnitTest（23 + 36 项通过）；lintDebug（0 错误、16 警告、2 提示）；assembleDebug assembleDebugAndroidTest；固定签名与独立 x86_64 包构建校验。JDK 17、Gradle 9.3.1，使用 runner 预装 SDK；本地没有匹配的完整 Android 构建环境，未将本地 wrapper 启动失败计为构建通过。
+- 初次复用的共享模拟器受其他任务操作影响，其视觉观察不计入验收。最终使用已安装 Android 15 / API 35 x86_64 镜像，在独立端口 5574 运行只读实例；没有下载 SDK/镜像、接受许可或使用 Docker。测试程序按目标标签会话定位当前 View，避免持有 Compose 已替换的旧 View。
+- 独立实例实际覆盖安装 x86_64 包及最终测试包：默认 instrumentation 的显示连接生命周期 3 项通过；-e safe_area_url 指定本机长页的首屏安全区、真实 Gecko 滚动、回顶及稳定视口尺寸回归通过。没有以未发生滚动的静态画面代替通过条件。
+- 正常入口人工检查：长页慢拖/快滑、回顶、底栏收放、顶部网站全屏按钮、全屏隐藏与返回恢复、横竖屏安全区；底栏横滑后活动标签由 24 变为 23，后台返回活动标签及 24 个标签数量保持。仅比较测试实例标识，不输出浏览记录。
+- 版本 0.4.7-gecko / versionCode 11，包名 org.rocks.browser.geckodemo，ARM64 手机 APK 为 164948785 字节；SHA-256 为 5cde84d59164579038d41a3475c0cc7e1038556478227bb20edddc5feb6438ad。CI 归档摘要、本地 APK 摘要、ARM64 架构与实际 APK v2 固定证书指纹均已核对；x86_64 验证包单独存放，不作为手机包交付。
+- 验证结束后已关闭本任务独立模拟器和临时本机长页服务。
+- 本次只交付候选 APK，没有创建公开 Release。直接覆盖安装并保留浏览数据，不应先卸载。手机实际挖孔、键盘、Dark Reader 和滚动帧时间仍需真机确认；未测得真实手机 FPS，不宣称流畅度已改善。
+
+---
+
 # Gecko 0.4.6 网页真实下穿状态栏（2026-11-01）
 
 - 用户明确要求网页真实进入状态栏背后。将网页 View 改为完整窗口高度，首屏下移安全区高度，随真实物理滚动逐渐移至窗口顶部，回顶恢复；滚动期间不改变 View 高度。平移同步 Gecko 屏幕坐标，并补偿固定底部控件的裁切量。
