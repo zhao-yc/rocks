@@ -24,3 +24,13 @@ Android Gecko 主线在存在可见的贴边固定栏时，将它的纯色延伸
 脚本回归并入 `node --test scripts/test-gecko-extension.mjs`；原生解析、贴边阈值和文档失效策略并入 `testDebugUnitTest`。完整检查使用 `gradle -p android/gecko-demo :core:test testDebugUnitTest lintDebug assembleDebug`。
 
 视觉验收须分别记录模拟器和真机证据：百度固定评论栏、白/深色固定栏及无固定栏页面、动态显隐、吸附状态、Dark Reader、收放动画、键盘、横屏、手势/三键导航、全屏恢复。JVM 与脚本测试不证明设备渲染正确。
+
+### 2026-11-01 验证记录
+
+- 运行时代码提交 `033b82f` 的 [CI 构建](https://github.com/zhao-yc/rocks/actions/runs/41306519155) 全部通过：12 项扩展脚本测试、23 项 core 测试、58 项 Gecko 单元测试、Lint、ARM64 Debug/测试 APK 及显式选择的 x86_64 模拟器 APK。未下载系统镜像或安装新的移动端 SDK。
+- API 35 专用模拟器上的真实 Gecko 回归通过：白色、深色、实际可用底边的吸附栏、被胶囊覆盖的吸附栏透明回退、普通页面透明、遮挡、动态变色/移除、切标签、同网址刷新及胶囊外侧截图像素。
+- 运行夹具：`node scripts/gecko-ux-fixture.mjs`；连接夹具：`adb -s emulator-5554 reverse tcp:8878 tcp:8878`；执行回归：`adb -s emulator-5554 shell am instrument -w -e bottom_background_url http://127.0.0.1:8878/ org.rocks.browser.geckodemo.test/org.rocks.geckodemo.DisplayLifecycleInstrumentation`。
+- 补充视觉检查通过：下滑收起、反向滚动展开、网页全屏隐藏及退出恢复。输入框唤起时系统报告输入法显示，浮动输入法画面中背景暂停，关闭后恢复；该模拟器使用浮动输入法，不能替代普通底部全键盘验收。
+- 尚未验收：实体手机、百度实际页面、Dark Reader、普通底部全键盘、横屏及三键导航。没有据此宣称生产发布或完整真机验收通过。
+
+后续修改内置扩展脚本或协议时应提升其 manifest 版本，并重新执行上述真实 Gecko 回归；脚本桩不能证明 native messaging、合成偏移或实际遮挡正确。
