@@ -15,8 +15,12 @@ import org.mozilla.geckoview.*
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.URI
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+
+/** Gecko 158 在响应头之前不保证取消成功；跨模型保留名额，直到迟到的原生响应真正结束。 */
+private object NativeIconNetworkBudget { val gate = Semaphore(2) }
 
 /** 原生匿名图标仓库：不接入扩展消息、不读取网页 Cookie，也不使用第三方图标服务。 */
 internal class SiteIconRepository(runtime: GeckoRuntime, cacheDir: File, private val scope: CoroutineScope) {
@@ -95,28 +99,68 @@ internal class SiteIconRepository(runtime: GeckoRuntime, cacheDir: File, private
     private suspend fun fetch(original: String): ByteArray = withTimeout(SiteIconPolicy.TIMEOUT) {
         var url = SiteIconPolicy.safeUrl(original) ?: error("图标地址无效")
         for (redirects in 0..3) {
-            // Gecko 158 的 IntDef 未声明位标记，但 fetch 的契约明确支持组合；两项保护必须同时保留。
-            @android.annotation.SuppressLint("WrongConstant")
-            val response = await(executor.fetch(WebRequest.Builder(url).header("Accept", "image/*,text/html;q=0.8").build(),
-                GeckoWebExecutor.FETCH_FLAGS_ANONYMOUS or GeckoWebExecutor.FETCH_FLAGS_NO_REDIRECTS))
-            if (response.statusCode in listOf(301, 302, 303, 307, 308)) {
-                response.body?.close()
-                check(redirects < 3)
-                val location = response.headers.entries.firstOrNull { it.key.equals("location", true) }?.value ?: error("缺少重定向地址")
-                url = SiteIconPolicy.safeUrl(URI(url).resolve(location).toASCIIString(), url) ?: error("图标重定向无效")
-                continue
-            }
-            val body = response.body ?: error("图标资源为空")
-            if (response.statusCode !in 200..299) { body.close(); error("图标响应失败") }
-            return@withTimeout suspendCancellableCoroutine { continuation ->
-                val reader = scope.launch(Dispatchers.IO) {
-                    try { val bytes = body.use(SiteIconPolicy::readBounded); continuation.resume(bytes) }
-                    catch (failure: Exception) { if (continuation.isActive) continuation.resumeWithException(failure) }
+            val lease = request(url)
+            try {
+                val response = lease.response
+                response.setReadTimeoutMillis(SiteIconPolicy.TIMEOUT)
+                if (response.statusCode in listOf(301, 302, 303, 307, 308)) {
+                    check(redirects < 3)
+                    val location = response.headers.entries.firstOrNull { it.key.equals("location", true) }?.value ?: error("缺少重定向地址")
+                    url = SiteIconPolicy.safeUrl(URI(url).resolve(location).toASCIIString(), url) ?: error("图标重定向无效")
+                    continue
                 }
-                continuation.invokeOnCancellation { runCatching { body.close() }; reader.cancel() }
-            }
+                val body = response.body ?: error("图标资源为空")
+                check(response.statusCode in 200..299) { "图标响应失败" }
+                return@withTimeout suspendCancellableCoroutine { continuation ->
+                    val reader = scope.launch(Dispatchers.IO) {
+                        try { val bytes = body.use(SiteIconPolicy::readBounded); continuation.resume(bytes) }
+                        catch (failure: Exception) { if (continuation.isActive) continuation.resumeWithException(failure) }
+                    }
+                    continuation.invokeOnCancellation { runCatching { body.close() }; reader.cancel() }
+                }
+            } finally { lease.close() }
         }
         error("图标重定向过多")
+    }
+
+    private class ResponseLease(val response: WebResponse, private val release: () -> Unit) {
+        private val closed = AtomicBoolean(false)
+        /** 读取、取消和迟到回调可能竞争关闭，同一名额只能释放一次。 */
+        fun close() { if (closed.compareAndSet(false, true)) { runCatching { response.body?.close() }; release() } }
+    }
+
+    /** 界面超时立即结束等待；取消失败的底层请求仍占名额，迟到结果只关闭而不交给界面。 */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun request(url: String): ResponseLease {
+        NativeIconNetworkBudget.gate.acquire()
+        val released = AtomicBoolean(false)
+        val release = { if (released.compareAndSet(false, true)) NativeIconNetworkBudget.gate.release(); Unit }
+        return suspendCancellableCoroutine { continuation ->
+            if (!continuation.isActive) { release(); return@suspendCancellableCoroutine }
+            try {
+                // Gecko 158 的 IntDef 漏标组合位标记，两项保护仍必须同时保留。
+                @android.annotation.SuppressLint("WrongConstant")
+                val result = executor.fetch(WebRequest.Builder(url).header("Accept", "image/*,text/html;q=0.8").build(),
+                    GeckoWebExecutor.FETCH_FLAGS_ANONYMOUS or GeckoWebExecutor.FETCH_FLAGS_NO_REDIRECTS)
+                result.accept({ response ->
+                    if (response == null) {
+                        release()
+                        if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Gecko 图标响应为空"))
+                    } else {
+                        val lease = ResponseLease(response, release)
+                        if (continuation.isActive) continuation.resume(lease) { lease.close() }
+                        else lease.close()
+                    }
+                }, { failure ->
+                    release()
+                    if (continuation.isActive) continuation.resumeWithException(failure ?: IllegalStateException("Gecko 图标请求失败"))
+                })
+                continuation.invokeOnCancellation { result.cancel() }
+            } catch (failure: Exception) {
+                release()
+                if (continuation.isActive) continuation.resumeWithException(failure)
+            }
+        }
     }
 
     /** 通过固定 Gecko 版本的本地图片解码器兼容 ICO，绝不把远程地址直接交给解码器再次请求。 */

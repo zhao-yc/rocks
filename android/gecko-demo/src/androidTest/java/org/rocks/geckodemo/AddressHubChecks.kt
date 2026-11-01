@@ -120,25 +120,29 @@ internal object AddressHubChecks {
 
         /** 使用真实 Gecko 请求和解码，覆盖回退、超时、体积限制及正负缓存。 */
         private fun iconChecks() {
-            val png = loadIcon(base + "icon-case/png") ?: error("真实 PNG 解码失败")
+            // 每轮独立计数和缓存键，不让前一轮失败留下的统计或磁盘缓存掩盖真实请求。
+            resetStats()
+            val run = SystemClock.elapsedRealtime()
+            val pngUrl = base + "icon-case/png?run=$run"
+            val png = loadIcon(pngUrl) ?: error("真实 PNG 解码失败")
             check(png.width in 1..128 && png.height in 1..128) { "图标未限制像素尺寸" }
             val before = stats().getInt("requests")
-            check(loadIcon(base + "icon-case/png") === png) { "内存缓存未复用位图" }
+            check(loadIcon(pngUrl) === png) { "内存缓存未复用位图" }
             check(stats().getInt("requests") == before) { "缓存命中仍发起网络请求" }
             listOf("ico", "relative/deep", "missing", "redirect", "loop", "timeout", "oversized", "broken").forEach {
-                check(loadIcon(base + "icon-case/" + it) != null) { "图标候选或标准回退失败：$it" }
+                check(loadIcon(base + "icon-case/" + it + "?run=$run") != null) { "图标候选或标准回退失败：$it" }
             }
-            val negative = "http://127.0.0.1:8879/icon-case/failure"
+            val negative = "http://127.0.0.1:8879/icon-case/failure?run=$run"
             check(loadIcon(negative) == null) { "真实失败没有使用首字回退" }
             val failureCount = stats().getInt("requests")
             check(loadIcon(negative) == null && stats().getInt("requests") == failureCount) { "负缓存仍重复发起请求" }
             val parallel = AtomicReference<List<Bitmap?>?>()
-            scope.launch { parallel.set((1..3).map { index -> async { model.icons.load(base + "icon-case/parallel?entry=$index") } }.awaitAll()) }
+            scope.launch { parallel.set((1..3).map { index -> async { model.icons.load(base + "icon-case/parallel?entry=$index&run=$run") } }.awaitAll()) }
             await("并发图标订阅") { parallel.get() != null }
             check(parallel.get()!!.all { it != null }) { "并发图标加载失败" }
             val result = stats()
             check(!result.getBoolean("sensitive")) { "图标请求携带了 Cookie、认证或来源地址" }
-            check(result.getInt("maximumActive") == 2) { "图标夹具没有验证实际并发上限" }
+            check(result.getInt("maximumActive") == 2) { "图标实际并发异常：${result.getInt("maximumActive")}" }
             check(result.getJSONObject("paths").getInt("/icons/loop") == 4) { "没有执行重定向上限" }
         }
 
@@ -161,6 +165,18 @@ internal object AddressHubChecks {
             val connection = URL(base + "icon-stats").openConnection() as HttpURLConnection
             connection.connectTimeout = 3000; connection.readTimeout = 3000
             return try { JSONObject(connection.inputStream.bufferedReader().use { it.readText() }) } finally { connection.disconnect() }
+        }
+
+        /** 等上一次合成连接结束再开始独立计数，不重启浏览器也不清空应用数据。 */
+        private fun resetStats() {
+            repeat(100) {
+                val connection = URL(base + "icon-reset").openConnection() as HttpURLConnection
+                connection.connectTimeout = 2000; connection.readTimeout = 2000
+                try { if (connection.responseCode == 200) { connection.inputStream.close(); return } }
+                finally { connection.disconnect() }
+                SystemClock.sleep(100)
+            }
+            error("旧图标连接未结束，拒绝重置验收计数")
         }
 
         private fun ime() = ViewCompat.getRootWindowInsets(activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true

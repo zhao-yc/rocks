@@ -120,7 +120,7 @@ internal fun AddressHub(model: BrowserModel, suggestions: List<AddressSuggestion
                             BasicTextField(state.address, state::changeAddress,
                                 Modifier.weight(1f).focusRequester(addressFocus).onFocusChanged {
                                     if (it.isFocused) state.focus(HubInput.ADDRESS)
-                                }.semantics { contentDescription = panelTitle }, singleLine = true,
+                                }, singleLine = true,
                                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                                 keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),

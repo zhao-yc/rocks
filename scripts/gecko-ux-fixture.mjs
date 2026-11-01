@@ -33,6 +33,11 @@ const ico = Buffer.concat([icoHeader, png]);
 /** 统计只覆盖合成图标资源，不记录真实网址、页面内容或请求头的值。 */
 function iconRoute(request, response, negative = false) {
   const route = request.url?.split('?')[0] ?? '';
+  if (route === '/icon-reset') {
+    if (iconStats.active !== 0) { response.writeHead(409); response.end(); return true; }
+    Object.assign(iconStats, { requests: 0, maximumActive: 0, sensitive: false, paths: {} });
+    response.end('已重置合成图标计数'); return true;
+  }
   if (route === '/icon-stats') {
     response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     response.end(JSON.stringify(iconStats)); return true;
