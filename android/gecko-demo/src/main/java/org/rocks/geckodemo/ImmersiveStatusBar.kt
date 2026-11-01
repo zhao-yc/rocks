@@ -1,7 +1,10 @@
 package org.rocks.geckodemo
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.SurfaceTexture
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -50,6 +53,10 @@ internal class ImmersiveStatusBar(private val window: Window) : DefaultLifecycle
     private var scheduled = false
     private var boundView: GeckoView? = null
     private var boundSession: GeckoSession? = null
+    private var boundTexture: TextureView? = null
+    private var originalTextureListener: TextureView.SurfaceTextureListener? = null
+    private var textureListener: TextureView.SurfaceTextureListener? = null
+    private var pixelCopyUnavailable: SurfaceTexture? = null
     private var darkIcons = true
     private var frameAverage = TopChromePolicy.WHITE
     var background by mutableIntStateOf(TopChromePolicy.WHITE)
@@ -71,6 +78,7 @@ internal class ImmersiveStatusBar(private val window: Window) : DefaultLifecycle
     private val focusListener = ViewTreeObserver.OnWindowFocusChangeListener { focused -> if (focused) requestSample() }
     private val layoutListener = View.OnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
         if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop) {
+            boundView?.let { bindTexture(it) }
             invalidateFrame()
             requestSample()
         }
@@ -157,6 +165,7 @@ internal class ImmersiveStatusBar(private val window: Window) : DefaultLifecycle
         if (boundView === view && boundSession === session) return
         unbind()
         boundView = view; boundSession = session
+        bindTexture(view)
         session?.compositorController?.addDrawCallback(drawCallback)
         view.addOnLayoutChangeListener(layoutListener)
         requestSample()
@@ -166,7 +175,42 @@ internal class ImmersiveStatusBar(private val window: Window) : DefaultLifecycle
     private fun unbind() {
         boundSession?.compositorController?.removeDrawCallback(drawCallback)
         boundView?.removeOnLayoutChangeListener(layoutListener)
+        unbindTexture()
         boundSession = null; boundView = null
+    }
+
+    /** TextureView 的实际帧更新同样驱动采样；完整转发 Gecko 的原监听及销毁所有权。 */
+    private fun bindTexture(view: GeckoView) {
+        val texture = findTexture(view) ?: return
+        if (boundTexture === texture && texture.surfaceTextureListener === textureListener) return
+        unbindTexture()
+        val previous = texture.surfaceTextureListener
+        val listener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+                previous?.onSurfaceTextureAvailable(surface, width, height)
+                requestSample()
+            }
+            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
+                previous?.onSurfaceTextureSizeChanged(surface, width, height)
+                invalidateFrame(); requestSample()
+            }
+            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                invalidateFrame()
+                return previous?.onSurfaceTextureDestroyed(surface) ?: true
+            }
+            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+                previous?.onSurfaceTextureUpdated(surface)
+                requestSample()
+            }
+        }
+        boundTexture = texture; originalTextureListener = previous; textureListener = listener
+        texture.surfaceTextureListener = listener
+    }
+
+    /** 只撤回自己安装的包装，不能覆盖引擎后来替换的监听器。 */
+    private fun unbindTexture() {
+        boundTexture?.let { if (it.surfaceTextureListener === textureListener) it.surfaceTextureListener = originalTextureListener }
+        boundTexture = null; originalTextureListener = null; textureListener = null; pixelCopyUnavailable = null
     }
 
     /** 清除显示帧并废弃请求代次，同时保留最后一次有效底色。 */
@@ -208,16 +252,13 @@ internal class ImmersiveStatusBar(private val window: Window) : DefaultLifecycle
         val height = (cropHeight.toFloat() * width / sourceWidth).roundToInt().coerceIn(1, 64)
         val bitmap = runCatching { Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888) }
             .getOrElse { gate.finish(ticket); return }
-        val surface = runCatching { Surface(surfaceTexture) }
-            .getOrElse { bitmap.recycle(); gate.finish(ticket); return }
         fun valid(): Boolean = eligible() && gate.accepts(ticket, currentScope()) && boundView === view &&
             texture.surfaceTexture === surfaceTexture && texture.width == sourceWidth && texture.height == sourceHeight
         fun complete() { gate.finish(ticket); schedule() }
-        runCatching {
-            PixelCopy.request(surface, Rect(0, 0, sourceWidth, cropHeight), bitmap, { result ->
+        fun process() {
                 var processing = false
                 try {
-                    if (result != PixelCopy.SUCCESS || !valid()) return@request
+                    if (!valid()) return
                     val pixels = IntArray(width * height)
                     bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
                     val previous = background
@@ -236,12 +277,42 @@ internal class ImmersiveStatusBar(private val window: Window) : DefaultLifecycle
                     processing = true
                 } finally {
                     bitmap.recycle()
-                    // 只释放临时 Surface 包装，不释放 Gecko 拥有的 SurfaceTexture。
-                    surface.release()
                     if (!processing) complete()
                 }
+        }
+        fun snapshotTop() {
+            if (!valid()) { bitmap.recycle(); complete(); return }
+            // 已被 TextureView 消费的缓冲可能无法再由临时 Surface PixelCopy。
+            // 备用读取最多 128×384，立刻裁出顶部并释放整张小图，不读取应用窗口。
+            val snapshotWidth = minOf(128, (384L * sourceWidth / sourceHeight).toInt().coerceAtLeast(1))
+            val snapshotHeight = (sourceHeight.toDouble() * snapshotWidth / sourceWidth).roundToInt().coerceIn(1, 384)
+            val snapshot = runCatching { texture.getBitmap(snapshotWidth, snapshotHeight) }.getOrNull()
+            if (snapshot == null) { bitmap.recycle(); complete(); return }
+            val copied = runCatching {
+                val bandHeight = (cropHeight.toDouble() * snapshotHeight / sourceHeight).roundToInt().coerceIn(1, snapshotHeight)
+                Canvas(bitmap).drawBitmap(snapshot, Rect(0, 0, snapshotWidth, bandHeight),
+                    Rect(0, 0, width, height), Paint(Paint.FILTER_BITMAP_FLAG))
+            }.isSuccess
+            snapshot.recycle()
+            if (copied) process() else { bitmap.recycle(); complete() }
+        }
+        if (pixelCopyUnavailable === surfaceTexture) { snapshotTop(); return }
+        val surface = runCatching { Surface(surfaceTexture) }.getOrNull()
+        if (surface == null) { snapshotTop(); return }
+        runCatching {
+            PixelCopy.request(surface, Rect(0, 0, sourceWidth, cropHeight), bitmap, { result ->
+                // 只释放临时包装，不释放 Gecko 拥有的 SurfaceTexture。
+                surface.release()
+                if (result == PixelCopy.SUCCESS) process() else {
+                    if (valid()) pixelCopyUnavailable = surfaceTexture
+                    snapshotTop()
+                }
             }, handler)
-        }.onFailure { bitmap.recycle(); surface.release(); complete() }
+        }.onFailure {
+            surface.release()
+            if (valid()) pixelCopyUnavailable = surfaceTexture
+            snapshotTop()
+        }
     }
 
     /** 使用公开 View 树寻找实际渲染目标，不反射 Gecko 的私有字段。 */
