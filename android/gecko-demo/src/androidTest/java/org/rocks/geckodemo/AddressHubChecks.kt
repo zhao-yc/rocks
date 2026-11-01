@@ -140,6 +140,8 @@ internal object AddressHubChecks {
                     model.closedTabs.toList()
                 }
                 click("127.0.0.1")
+                // Android 会移除已选中 Tab 的标准点击动作，先切另一分类再返回概览。
+                click(inst.targetContext.getString(R.string.bookmarks))
                 click(inst.targetContext.getString(R.string.overview))
                 await("概览恢复入口") { model.addressHub.visible && !ime() }
                 click("指定恢复一")
