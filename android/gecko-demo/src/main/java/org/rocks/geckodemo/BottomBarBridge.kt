@@ -93,12 +93,14 @@ internal class BottomBarBridge(
         if (paused || currentView == null || session == null || currentView.session !== session ||
             page(session) != boundScope || currentReport == null) { color = null; return }
         val matrix = Matrix(); val inverse = Matrix()
-        session.getClientToScreenMatrix(matrix)
+        // TextureView 后端的屏幕原点可能尚未同步；使用同一 View 的 surface 坐标避开原点漂移。
+        session.getClientToSurfaceMatrix(matrix)
         if (!matrix.invert(inverse)) { color = null; return }
-        val origin = IntArray(2); currentView.getLocationOnScreen(origin)
-        val bottom = floatArrayOf(origin[0].toFloat(), (origin[1] + currentView.height - clipping).toFloat())
+        val bottom = floatArrayOf(0f, (currentView.height - clipping).toFloat(), 0f, currentView.height.toFloat())
         inverse.mapPoints(bottom)
-        color = currentReport.colorAt(bottom[1].toDouble())
+        // Gecko 在合成阶段应用 fixed-bottom offset，DOM 矩形不随 setVerticalClipping 改变。
+        // 把上报的逻辑矩形也移动相同距离，再与实际可用底边比较，避免重复扣减。
+        color = currentReport.colorAt(bottom[1].toDouble(), (bottom[3] - bottom[1]).toDouble())
     }
 
     /** 清理时先取消当前身份，再断开端口，防止断开回调重入。 */

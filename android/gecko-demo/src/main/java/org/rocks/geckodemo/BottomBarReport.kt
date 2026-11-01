@@ -9,11 +9,12 @@ internal data class BottomBarRect(val left: Double, val top: Double, val right: 
 internal data class BottomBarReport(val documentId: String, val left: Double, val top: Double,
     val width: Double, val height: Double, val bars: List<BottomBarRect>) {
     /** 原生端按真实 Gecko 坐标映射得到可用底边，不把 layout viewport 底边当成可见底边。 */
-    fun colorAt(visibleBottom: Double): Int? {
-        if (!visibleBottom.isFinite() || visibleBottom <= top || visibleBottom > top + height + 4) return null
+    fun colorAt(visibleBottom: Double, fixedOffset: Double = 0.0): Int? {
+        if (!visibleBottom.isFinite() || !fixedOffset.isFinite() || fixedOffset < 0 ||
+            visibleBottom <= top || visibleBottom > top + height - fixedOffset + 4) return null
         return bars.firstOrNull { bar ->
             min(bar.right, left + width) - max(bar.left, left) >= width * 0.8 &&
-                bar.top < visibleBottom && bar.bottom > bar.top && abs(bar.bottom - visibleBottom) <= 4
+                bar.top - fixedOffset < visibleBottom && bar.bottom > bar.top && abs(bar.bottom - fixedOffset - visibleBottom) <= 4
         }?.color
     }
 

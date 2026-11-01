@@ -91,6 +91,27 @@ final class BottomBackgroundChecks {
             if (matched.get()) return;
             SystemClock.sleep(100);
         }
-        throw new AssertionError("等待超时：" + name);
+        throw new AssertionError("等待超时：" + name + "；" + diagnostics());
+    }
+
+    /** 仅对回环夹具输出内存几何，方便识别真实 API 与 JVM 桩的差异。 */
+    private String diagnostics() {
+        StringBuilder result = new StringBuilder();
+        instrumentation.runOnMainSync(() -> {
+            try {
+                Object bridge = model.getBottomBackground();
+                for (String name : new String[]{"port", "boundScope", "report", "clipping", "paused", "view"}) {
+                    java.lang.reflect.Field field = bridge.getClass().getDeclaredField(name); field.setAccessible(true);
+                    Object value = field.get(bridge); result.append(name).append('=').append(value).append(';');
+                    if (value instanceof org.mozilla.geckoview.GeckoView) {
+                        org.mozilla.geckoview.GeckoView view = (org.mozilla.geckoview.GeckoView) value;
+                        android.graphics.Matrix matrix = new android.graphics.Matrix(); view.getSession().getClientToScreenMatrix(matrix);
+                        int[] origin = new int[2]; view.getLocationOnScreen(origin);
+                        result.append("height=").append(view.getHeight()).append(";originY=").append(origin[1]).append(";matrix=").append(matrix.toShortString());
+                    }
+                }
+            } catch (ReflectiveOperationException error) { result.append(error); }
+        });
+        return result.toString();
     }
 }

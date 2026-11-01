@@ -26,6 +26,14 @@ class BottomBarReportTest {
         assertNull(BottomBarReport.parse(json)!!.colorAt(720.0))
     }
 
+    @Test fun compositorClippingMovesFixedBarWithoutChangingDomRect() {
+        val report = BottomBarReport.parse(message())!!
+        assertEquals(0xFF141E28.toInt(), report.colorAt(640.0, 80.0))
+        assertNull(report.colorAt(640.0))
+        assertNull(report.colorAt(640.0, -80.0))
+        assertNull(report.colorAt(640.0, Double.NaN))
+    }
+
     @Test fun rejectsInvalidMessagesWithoutThrowing() {
         assertNull(BottomBarReport.parse("{}"))
         assertNull(BottomBarReport.parse(message().put("documentId", "")))
