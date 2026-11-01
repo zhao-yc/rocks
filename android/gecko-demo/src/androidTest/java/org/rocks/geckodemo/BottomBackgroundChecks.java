@@ -40,6 +40,7 @@ final class BottomBackgroundChecks {
             await("会话恢复", () -> !model.getRestoring());
             navigate("bottom-white"); awaitColor(0xFFFFFFFF); verifyPixel(0xFFFFFFFF);
             navigate("bottom-dark"); awaitColor(0xFF141E28); verifyPixel(0xFF141E28);
+            navigate("bottom-sticky"); awaitColor(0xFFFFFFFF); verifyPixel(0xFFFFFFFF);
             navigate("bottom-none"); SystemClock.sleep(500); awaitColor(null);
             navigate("bottom-obscured"); SystemClock.sleep(500); awaitColor(null);
             navigate("bottom-dynamic"); awaitColor(0xFFFFFFFF); awaitColor(0xFF141E28); awaitColor(null);

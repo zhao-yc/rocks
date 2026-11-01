@@ -13,7 +13,8 @@ browser.tabs.onActivated.addListener(({ tabId }) => activate(tabId));
 browser.runtime.onMessage.addListener((message, sender) => {
   if (sender.id !== browser.runtime.id || sender.tab?.id === undefined || message?.kind !== 'bottom-activity') return undefined;
   return browser.tabs.get(sender.tab.id).then(tab => {
-    if (tab.active) activate(tab.id);
+    // 初次查询补齐缓存；晚到的旧查询不能覆盖之后发生的激活事件。
+    if (tab.active && activeId === null) activeId = tab.id;
     return { active: tab.active === true };
   });
 });

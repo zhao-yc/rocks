@@ -8,6 +8,7 @@
   let retryTimer = null, retries = 0;
   let dirty = true, candidates = [], observing = false;
   let selected = false;
+  let activityRevision = 0;
 
   /** 解析浏览器计算后的 sRGB 颜色；不支持的颜色空间保守回退为透明。 */
   function rgba(value) {
@@ -96,9 +97,11 @@
 
   /** Gecko 的网页焦点和原生焦点不同步；使用扩展内部的实际标签激活状态。 */
   function refreshActivity() {
+    const expected = activityRevision;
     browser.runtime.sendMessage({ kind: 'bottom-activity' }).then(result => {
+      if (expected !== activityRevision) return;
       selected = result?.active === true; activityChanged();
-    }).catch(() => { selected = false; activityChanged(); });
+    }).catch(() => { if (expected === activityRevision) { selected = false; activityChanged(); } });
   }
 
   /** 合并事件，最多每秒检测十次；仅发送变化，不进行空闲轮询。 */
@@ -148,6 +151,7 @@
   });
   browser.runtime.onMessage.addListener((message, sender) => {
     if (sender.id === browser.runtime.id && message?.kind === 'bottom-activity') {
+      activityRevision++;
       selected = message.active === true; activityChanged();
     }
   });

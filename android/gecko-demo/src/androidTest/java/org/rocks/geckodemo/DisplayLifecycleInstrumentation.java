@@ -34,7 +34,7 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
         try {
             if (bottomBackgroundUrl != null) {
                 BottomBackgroundChecks.verify(this, bottomBackgroundUrl);
-                result.putString("stream", "底栏背景回归：白色、深色、透明、遮挡、动态变色/移除、切标签、刷新与背景像素均通过\n");
+                result.putString("stream", "底栏背景回归：白色、深色、吸附、透明、遮挡、动态变色/移除、切标签、刷新与背景像素均通过\n");
                 finish(Activity.RESULT_OK, result);
                 return;
             }

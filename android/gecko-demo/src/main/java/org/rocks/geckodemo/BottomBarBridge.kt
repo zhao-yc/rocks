@@ -8,6 +8,7 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
+import java.lang.ref.WeakReference
 
 /** 单用途内置扩展通道：只有布局/颜色上报，无网页命令、存储或网络能力。 */
 internal class BottomBarBridge(
@@ -23,7 +24,7 @@ internal class BottomBarBridge(
     private var report: BottomBarReport? = null
     private var view: GeckoView? = null
     private var clipping = 0
-    private val geometries = mutableMapOf<GeckoSession, Pair<GeckoView, Int>>()
+    private val geometries = mutableMapOf<GeckoSession, Pair<WeakReference<GeckoView>, Int>>()
     private var paused = false
     private var closed = false
     var color by mutableStateOf<Int?>(null)
@@ -87,14 +88,14 @@ internal class BottomBarBridge(
         val session = view.session ?: return
         if (session !in sessions) return
         // 首次布局可能早于文档提交；几何按会话缓存，上报仍由身份校验严格控制。
-        geometries[session] = view to clipping
+        geometries[session] = WeakReference(view) to clipping
         updateColor()
     }
 
     private fun updateColor() {
         val session = port?.sender?.session
         val geometry = geometries[session]
-        val currentView = geometry?.first
+        val currentView = geometry?.first?.get()
         val clipping = geometry?.second ?: 0
         this.view = currentView; this.clipping = clipping
         val currentReport = report

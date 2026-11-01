@@ -62,8 +62,8 @@ test('a fresh page context restores extension settings from storage', async () =
 const bottomScript = readFileSync(new URL('../android/gecko-demo/src/main/assets/bottom-bar/content.js', import.meta.url), 'utf8');
 
 /** 用真实脚本和可控布局/时间测试检测逻辑，不把此结果当成 Gecko 真机验收。 */
-function bottomHarness(secure = true) {
-  let now = 0, focused = true, hit = null, observerCallback, activityListener;
+function bottomHarness(secure = true, deferredActivity = false) {
+  let now = 0, focused = true, hit = null, observerCallback, activityListener, activityReply;
   const tasks = new Map(), listeners = new Map(), reports = [], ports = [];
   let nextTimer = 0;
   const style = { position: 'static', bottom: 'auto', opacity: '1', backgroundColor: 'rgba(0, 0, 0, 0)',
@@ -82,7 +82,7 @@ function bottomHarness(secure = true) {
     }) };
   const browser = { runtime: { id: 'bottom-background@rocks.internal',
     onMessage: { addListener: callback => { activityListener = callback; } },
-    sendMessage: () => ({ then(callback) { callback({ active: focused }); return { catch() {} }; } }),
+    sendMessage: () => ({ then(callback) { if (deferredActivity) activityReply = callback; else callback({ active: focused }); return { catch() {} }; } }),
     connectNative: name => {
     assert.equal(name, 'rocksBottomBackground');
     const port = { postMessage: report => reports.push(JSON.parse(JSON.stringify(report))),
@@ -95,6 +95,7 @@ function bottomHarness(secure = true) {
     performance: { now: () => now }, setTimeout: (callback, delay) => { const id = ++nextTimer; tasks.set(id, { callback, due: now + delay }); return id; },
     clearTimeout: id => tasks.delete(id) });
   return { reports, ports, viewport, document, tasks,
+    replyActivity(value) { activityReply(value); },
     add(overrides = {}, rect = { left: 0, top: 680, right: 400, bottom: 720, height: 40 }, parent = null) {
       const node = { style: { ...style, ...overrides }, isConnected: true, parentElement: parent, getBoundingClientRect: () => rect,
         contains: child => { for (let n = child; n; n = n.parentElement) if (n === node) return true; return false; } };
@@ -203,5 +204,17 @@ test('扩展内部按标签激活通知暂停与恢复，拒绝其他扩展请�
   assert.equal((await message({ kind: 'bottom-activity' }, { id: 'internal', tab: { id: 1 } })).active, true);
   assert.equal((await message({ kind: 'bottom-activity' }, { id: 'internal', tab: { id: 2 } })).active, false);
   activated({ tabId: 2 });
-  assert.deepEqual(notifications, [[1, true], [1, false], [2, true]]);
+  assert.deepEqual(notifications, [[1, false], [2, true]]);
+  let reply;
+  browser.tabs.get = () => new Promise(resolve => { reply = resolve; });
+  const pending = message({ kind: 'bottom-activity' }, { id: 'internal', tab: { id: 1 } });
+  activated({ tabId: 3 }); reply({ id: 1, active: true }); await pending;
+  assert.deepEqual(notifications.at(-1), [3, true]);
+});
+
+test('晚到的激活查询不能覆盖更新的后台状态', () => {
+  const h = bottomHarness(true, true);
+  h.add({ position: 'fixed', backgroundColor: 'rgb(255, 255, 255)' });
+  h.focus(false); h.replyActivity({ active: true }); h.advance(1000);
+  assert.equal(h.reports.length, 0);
 });
