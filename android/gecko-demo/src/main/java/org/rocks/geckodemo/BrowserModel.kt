@@ -426,6 +426,8 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         }
         session.compositorScrollDelegate = object : GeckoSession.CompositorScrollDelegate {
             override fun onScrollChanged(session: GeckoSession, update: GeckoSession.ScrollPositionUpdate) {
+                // 图标面板或旋转之后，合成器可能晚于网页报告更新缩放矩阵；以真实合成事件重算底边。
+                bottomBackground.sync()
                 // 只维护底栏的方向阈值状态，避免每次滚动都写入 Compose 页面状态。
                 if (tab.id != selectedId || !foreground || fullScreen) return
                 toolbarCollapsed = toolbarScroll.onScroll(update.scrollY, update.zoom,

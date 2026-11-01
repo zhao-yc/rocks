@@ -133,6 +133,8 @@ final class BottomBackgroundChecks {
                         view.getSession().getClientToSurfaceMatrix(matrix);
                         android.graphics.Matrix inverse = new android.graphics.Matrix();
                         result.append(";surface=").append(matrix.toShortString());
+                        result.append(";sameSession=").append(view.getSession() == model.getCurrent().getSession())
+                                .append(";color=").append(model.getBottomBackground().getColor());
                         if (matrix.invert(inverse)) {
                             java.lang.reflect.Field clip = bridge.getClass().getDeclaredField("clipping"); clip.setAccessible(true);
                             float[] bottom = {0, view.getHeight() - clip.getInt(bridge), 0, view.getHeight()}; inverse.mapPoints(bottom);
