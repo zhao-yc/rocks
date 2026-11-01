@@ -167,4 +167,6 @@
     <string name="show_less">Show less</string>
     <string name="today">Today</string>
     <string name="yesterday">Yesterday</string>
+    <string name="history_collapsed">Collapsed</string>
+    <string name="history_expanded">Expanded</string>
 </resources>

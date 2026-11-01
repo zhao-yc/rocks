@@ -167,4 +167,6 @@
     <string name="show_less">收起</string>
     <string name="today">今天</string>
     <string name="yesterday">昨天</string>
+    <string name="history_collapsed">已收起</string>
+    <string name="history_expanded">已展开</string>
 </resources>

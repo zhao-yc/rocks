@@ -257,13 +257,15 @@ private fun LazyListScope.libraryItems(model: BrowserModel, requester: FocusRequ
         RecordCard(model, record, { open(record.url) }, remove = { model.removeBookmark(record.url) })
     } else HistoryDateSections.group(results).forEach { section ->
         item(key = "date-${section.date}") {
+            val collapsed = query.isBlank() && state.collapsedDates[section.date] == true
+            val expandedState = stringResource(if (collapsed) R.string.history_collapsed else R.string.history_expanded)
             val title = when (section.date) {
                 LocalDate.now() -> stringResource(R.string.today)
                 LocalDate.now().minusDays(1) -> stringResource(R.string.yesterday)
                 else -> section.date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
             }
             TextButton(onClick = { state.collapsedDates[section.date] = state.collapsedDates[section.date] != true },
-                enabled = query.isBlank(), modifier = Modifier.fillMaxWidth()) {
+                enabled = query.isBlank(), modifier = Modifier.fillMaxWidth().semantics { stateDescription = expandedState }) {
                 Text(title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
                 Icon(if (query.isBlank() && state.collapsedDates[section.date] == true) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess, null)
             }
@@ -275,6 +277,7 @@ private fun LazyListScope.libraryItems(model: BrowserModel, requester: FocusRequ
 }
 
 @Composable
+/** 单条记录共用真实图标与删除入口，整行点击只导航一次。 */
 private fun RecordCard(model: BrowserModel, record: PageRecord, open: () -> Unit, remove: (() -> Unit)? = null) {
     Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
         ListItem(headlineContent = { Text(record.title.ifBlank { record.url }, maxLines = 2, overflow = TextOverflow.Ellipsis) },
@@ -287,11 +290,13 @@ private fun RecordCard(model: BrowserModel, record: PageRecord, open: () -> Unit
 }
 
 @Composable
+/** 段落标题同时提供读屏标题导航语义。 */
 private fun HubHeading(title: String, modifier: Modifier = Modifier) {
     Text(title, modifier.padding(vertical = 8.dp).semantics { heading() }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 }
 
 @Composable
+/** 空数据与过滤无结果使用不同提示，不显示没有实际操作的占位按钮。 */
 private fun HubEmpty(empty: Boolean, message: String? = null) {
     Text(message ?: stringResource(if (empty) R.string.library_empty else R.string.library_no_matches),
         Modifier.fillMaxWidth().padding(vertical = 16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)

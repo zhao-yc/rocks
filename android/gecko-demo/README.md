@@ -16,7 +16,7 @@ Compare slow dragging, fast swipes and inertial scrolling on the same pages and 
 
 The address editor now opens a native full-screen library with Overview, Bookmarks and History segments and a persistent bottom address pill. It selects the current URL and opens the keyboard immediately. Switching segments hides the keyboard while retaining the draft; Back or Close returns to the page in one step. Overview shows bookmark favorites and individually restorable recently closed tabs. History is grouped by local date. Website icons are loaded anonymously from visible sites, with bounded local caches and letter tiles on failure. The overlay leaves the underlying Gecko view intact. Bookmark/history menu entries use the same library without requesting the keyboard.
 
-- Opening the address editor selects the full URL and shows up to six recent visits. Editing the text matches open tabs, bookmarks and history locally, with URL deduplication and direct switching to an existing tab. Suggestions send no network requests. Clear, cancel, outside tap and input-specific validation are available.
+- Opening the address editor selects the full URL and shows the library overview. Editing the text matches open tabs, bookmarks and history locally, with URL deduplication, up to six results and direct switching to an existing tab. Matching does not transmit the input text; visible website icons use separate anonymous requests. Clear, cancel, Back and input-specific validation are available.
 - Long-press the tab button for new, close and reopen actions. New tabs focus the address editor. The overview starts near the selected tab and includes its own undo control; closing other tabs requires confirmation.
 - The last ten manually closed regular pages can be reopened during this process, with their title, position and desktop mode. Reopening reloads the URL, without restoring forms, scroll position or navigation stacks. Restart clears the closed-tab list. Programmatic closures, extension pages and bulk closures are excluded; reaching the tab limit does not consume a recovery record.
 - Bookmarks and history have independent title/URL search fields and distinct empty/no-match states. Clearing history always clears the entire URL list, including filtered-out records; cookies and website storage remain.
@@ -139,5 +139,6 @@ GeckoView is used unmodified under **Mozilla Public License 2.0**, with its own 
 - [GeckoView documentation](https://firefox-source-docs.mozilla.org/mobile/android/geckoview/index.html)
 - [Dark Reader / MIT](https://github.com/darkreader/darkreader)
 - [uBlock Origin / GPLv3](https://github.com/gorhill/uBlock)
+- [jsoup / MIT](https://jsoup.org/license)
 
 Dark Reader/uBlock packages are downloaded separately from Mozilla and are not bundled. AndroidX/Compose, Kotlin and build tools retain their own licenses. The license for Rocks itself remains undecided; public repository visibility is not a license grant.
