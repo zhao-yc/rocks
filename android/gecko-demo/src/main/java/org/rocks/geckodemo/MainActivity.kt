@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -166,13 +167,11 @@ private fun BrowserScreen(model: BrowserModel) {
             }
         }
     }
-    var editing by remember { mutableStateOf(false) }
+    val hub = model.addressHub
+    val editing = hub.visible
     var editorSawKeyboard by remember { mutableStateOf(false) }
-    var address by remember { mutableStateOf(TextFieldValue()) }
-    var addressChanged by remember { mutableStateOf(false) }
-    var addressError by remember { mutableStateOf<AddressInputError?>(null) }
+    var holdWebViewport by remember { mutableStateOf(false) }
     var editNewTabId by remember { mutableStateOf<Long?>(null) }
-    val focusRequester = remember { FocusRequester() }
     val current = model.current
     val pager = rememberPagerState(initialPage = model.tabs.indexOf(current).coerceAtLeast(0), pageCount = { model.tabs.size })
     var contentWidth by remember { mutableFloatStateOf(1f) }
@@ -198,20 +197,16 @@ private fun BrowserScreen(model: BrowserModel) {
     SideEffect { model.setToolbarInteraction(chromePinned, draggingTabs) }
     DisposableEffect(model) { onDispose { model.setToolbarInteraction(false, false) } }
     fun finishEditing() {
-        editing = false
-        addressError = null
+        hub.close()
         focusManager.clearFocus()
         keyboard?.hide()
         model.current.session.setFocused(true)
     }
     // 点击地址栏时先展示最近访问，只有实际修改文字才启动匹配。
     fun beginEditing() {
-        val value = model.current.url.takeUnless { it == DemoPolicy.HOME }.orEmpty()
         model.finder.close()
-        address = TextFieldValue(value, selection = TextRange(0, value.length))
-        addressChanged = false
-        addressError = null
-        editing = true
+        hub.open(model.selectedId, model.current.url)
+        holdWebViewport = true
         model.current.session.setFocused(false)
     }
     // 新标签创建成功才发出编辑请求，选中状态完成重组后再聚焦，避免焦点竞态。
@@ -220,7 +215,7 @@ private fun BrowserScreen(model: BrowserModel) {
         model.newTab(DemoPolicy.HOME)?.let { editNewTabId = it.id }
     }
     val suggestions = if (editing) LocalBrowserSearch.suggestions(
-        if (addressChanged) address.text else "",
+        if (hub.showingMatches) hub.address.text else "",
         model.tabs.filter { it.extensionBase == null }.sortedBy { if (it.id == model.selectedId) 0 else 1 }
             .map { SearchableTab(it.id, it.url, it.title) }, model.bookmarks.toList(), model.history.toList()) else emptyList()
     val dragState = rememberDraggableState { delta ->
@@ -275,18 +270,20 @@ private fun BrowserScreen(model: BrowserModel) {
             model.dismissCloseNotice(closed.closureId)
         }
     }
-    LaunchedEffect(editing) { if (editing) { focusRequester.requestFocus(); keyboard?.show() } }
-    LaunchedEffect(editing, keyboardVisible, windowFocused) {
+    LaunchedEffect(editing, hub.input, keyboardVisible, windowFocused) {
         // 系统返回先由输入法消费时，等收起动画结束后一起退出编辑。
         // 窗口失焦时解除观察，切换输入法或临时离开应用不会因此丢弃草稿。
         when {
-            !editing || !windowFocused -> editorSawKeyboard = false
+            !editing || !windowFocused || hub.input == HubInput.NONE -> editorSawKeyboard = false
             keyboardVisible -> editorSawKeyboard = true
             editorSawKeyboard -> { delay(150); finishEditing() }
         }
     }
+    LaunchedEffect(editing, keyboardVisible) {
+        if (!editing && !keyboardVisible) holdWebViewport = false
+    }
     LaunchedEffect(model.selectedId) {
-        if (editing) finishEditing()
+        if (editing && hub.ownerTabId != model.selectedId) finishEditing()
         model.expandToolbar()
         if (editNewTabId == model.selectedId) {
             beginEditing()
@@ -313,7 +310,8 @@ private fun BrowserScreen(model: BrowserModel) {
             // 顶部与两侧安全区只消费一次；滚动时不再平移真实网页或触发顶部效果。
             Box(Modifier.fillMaxSize().then(if (model.fullScreen) Modifier else
                 Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
-                .imePadding()) {
+                .then(if (editing || holdWebViewport) Modifier else Modifier.imePadding())
+                .then(if (editing) Modifier.clearAndSetSemantics { } else Modifier)) {
                 HorizontalPager(state = pager, userScrollEnabled = false, beyondViewportPageCount = 1,
                     key = { model.tabs[it].id }, modifier = Modifier.fillMaxSize().clipToBounds().onSizeChanged { contentWidth = it.width.toFloat() }) { index ->
                     val tab = model.tabs.getOrNull(index)
@@ -344,38 +342,27 @@ private fun BrowserScreen(model: BrowserModel) {
                 }
                 SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = with(density) { bottomObscured.toDp() }))
                 if (!model.fullScreen) {
-                    if (editing) Box(Modifier.fillMaxSize().clickable(
-                        interactionSource = remember { MutableInteractionSource() }, indication = null,
-                        onClickLabel = stringResource(R.string.cancel), onClick = ::finishEditing))
-                    FloatingBrowserToolbar(model, compact, editing, address, {
-                        if (it.text != address.text) { addressChanged = true; addressError = null }
-                        address = it
-                    }, focusRequester,
+                    if (!editing) FloatingBrowserToolbar(model, compact,
                         addressGesture,
                         onAddress = {
-                            if (compact) model.expandToolbar()
-                            else beginEditing()
+                            model.expandToolbar()
+                            beginEditing()
                         },
-                        onSubmit = {
-                            val target = LocalBrowserSearch.resolve(address.text, model.searchEngine)
-                            addressError = target.error
-                            if (target.url != null && model.navigate(target.url)) finishEditing()
-                        }, onCancel = ::finishEditing,
-                        addressError = addressError, suggestions = suggestions,
-                        showingRecents = !addressChanged || address.text.isBlank(),
-                        onSuggestion = { item ->
-                            // 结果来自当前快照；已关闭的标签不接收过期切换操作。
-                            if (item.tabId != null && model.tabs.any { it.id == item.tabId }) {
-                                finishEditing(); model.selectTab(item.tabId)
-                            } else if (model.navigate(item.url)) finishEditing()
-                        },
-                        onClearAddress = { address = TextFieldValue(); addressChanged = true; addressError = null },
                         onTabs = { showTabs = true }, onMenu = { showMenu = true },
                         menuExpanded = showMenu, onDismissMenu = { showMenu = false },
                         tabMenuExpanded = showTabActions, onTabMenu = { showTabActions = true },
                         onDismissTabMenu = { showTabActions = false }, onNewTab = ::createTab,
                         onExtensions = { showMenu = false; showExtensions = true },
-                        onLibrary = { showMenu = false; library = it },
+                        onLibrary = {
+                            showMenu = false
+                            if (it == LibraryPage.BOOKMARKS || it == LibraryPage.HISTORY) {
+                                model.finder.close()
+                                hub.open(model.selectedId, current.url,
+                                    if (it == LibraryPage.BOOKMARKS) AddressHubPage.BOOKMARKS else AddressHubPage.HISTORY, edit = false)
+                                holdWebViewport = true
+                                current.session.setFocused(false)
+                            } else library = it
+                        },
                         onSitePermissions = { showMenu = false; showSitePermissions = true },
                         onShare = {
                             context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
@@ -387,6 +374,16 @@ private fun BrowserScreen(model: BrowserModel) {
                             .navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp))
                 }
             }
+            if (editing) AddressHub(model, suggestions, snackbar,
+                onSubmit = {
+                    val target = LocalBrowserSearch.resolve(hub.address.text, model.searchEngine)
+                    hub.error = target.error
+                    if (target.url != null && model.navigate(target.url)) finishEditing()
+                }, onSuggestion = { item ->
+                    if (item.tabId != null && model.tabs.any { it.id == item.tabId }) {
+                        finishEditing(); model.selectTab(item.tabId)
+                    } else if (model.navigate(item.url)) finishEditing()
+                }, onClose = ::finishEditing)
         }
     }
 
@@ -462,6 +459,8 @@ private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured:
             view.protectTopAndSides = protectTopAndSides
             view.isFocusableInTouchMode = allowFocus
             view.isFocusable = allowFocus
+            view.importantForAccessibility = if (allowFocus) android.view.View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+                else android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
             if (allowFocus) {
                 if (!view.hasFocus()) view.requestFocus()
             } else if (view.hasFocus()) view.clearFocus()

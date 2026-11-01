@@ -51,11 +51,7 @@ internal fun rememberTouchExploration(): Boolean {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun FloatingBrowserToolbar(
-    model: BrowserModel, compact: Boolean, editing: Boolean,
-    address: TextFieldValue, onAddressChange: (TextFieldValue) -> Unit, focusRequester: FocusRequester,
-    addressModifier: Modifier, onAddress: () -> Unit, onSubmit: () -> Unit, onCancel: () -> Unit,
-    addressError: AddressInputError?, suggestions: List<AddressSuggestion>, showingRecents: Boolean,
-    onSuggestion: (AddressSuggestion) -> Unit, onClearAddress: () -> Unit,
+    model: BrowserModel, compact: Boolean, addressModifier: Modifier, onAddress: () -> Unit,
     onTabs: () -> Unit, onMenu: () -> Unit, menuExpanded: Boolean, onDismissMenu: () -> Unit,
     tabMenuExpanded: Boolean, onTabMenu: () -> Unit, onDismissTabMenu: () -> Unit, onNewTab: () -> Unit,
     onExtensions: () -> Unit, onLibrary: (LibraryPage) -> Unit, onSitePermissions: () -> Unit, onShare: () -> Unit,
@@ -68,41 +64,19 @@ internal fun FloatingBrowserToolbar(
     val editLabel = stringResource(R.string.edit_address)
     val stateLabel = stringResource(if (compact) R.string.toolbar_compact else R.string.toolbar_expanded)
     BoxWithConstraints(modifier, contentAlignment = Alignment.BottomCenter) {
-        val availableHeight = maxHeight
         val compactWidth = (host.length * 7 + 48).coerceIn(144, 220).dp.coerceAtMost(maxWidth)
         val width by animateDpAsState(if (compact) compactWidth else maxWidth,
             spring(stiffness = 500f), label = "floating-toolbar-width")
         Column(Modifier.width(width), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // 建议独立于底栏遮挡高度；键盘或横屏压缩空间时优先保留输入框。
-            if (editing && availableHeight > 160.dp) AddressSuggestions(suggestions, showingRecents, onSuggestion,
-                Modifier.fillMaxWidth().heightIn(max = (availableHeight - 128.dp).coerceIn(0.dp, 280.dp)))
             Surface(modifier = Modifier.fillMaxWidth().onSizeChanged { onBarHeight(it.height) }
                 .animateContentSize(spring(stiffness = 500f))
                 .semantics { stateDescription = stateLabel },
-                shape = RoundedCornerShape(if (editing) 24.dp else 30.dp),
+                shape = RoundedCornerShape(30.dp),
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)),
                 tonalElevation = 0.dp, shadowElevation = 0.dp) {
                 if (model.finder.visible) {
                     FindInPageControls(model)
-                } else if (editing) {
-                    Row(Modifier.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(value = address, onValueChange = onAddressChange, singleLine = true,
-                            placeholder = { Text(stringResource(R.string.address_hint)) },
-                            modifier = Modifier.weight(1f).focusRequester(focusRequester),
-                            shape = RoundedCornerShape(20.dp),
-                            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false,
-                                keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-                            keyboardActions = KeyboardActions(onGo = { onSubmit() }),
-                            isError = addressError != null,
-                            supportingText = if (addressError != null) { { Text(stringResource(addressError.label)) } } else null,
-                            trailingIcon = {
-                                if (address.text.isNotEmpty()) IconButton(onClick = onClearAddress) {
-                                    Icon(Icons.Outlined.Close, stringResource(R.string.clear_input))
-                                }
-                            })
-                        TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
-                    }
                 } else if (compact) {
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).then(addressModifier)
                         .clickable(onClickLabel = expandLabel, role = Role.Button, onClick = onAddress)

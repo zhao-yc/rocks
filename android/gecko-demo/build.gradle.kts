@@ -19,6 +19,7 @@ android {
     buildFeatures { compose = true }
     packaging { jniLibs.useLegacyPackaging = true }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -61,6 +62,8 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 }
 
 dependencies {
+    implementation("org.jsoup:jsoup:1.23.2")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation(project(":core"))
     implementation("org.mozilla.geckoview:geckoview:158.0.20261021001945")
     implementation(platform("androidx.compose:compose-bom:2025.04.01"))

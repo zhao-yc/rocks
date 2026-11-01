@@ -154,4 +154,17 @@
     <string name="clear_search">Clear search</string>
     <string name="library_no_matches">No matching records. Try another keyword.</string>
     <string name="clear_all_history">Clear all history</string>
+    <string name="address_hub">Address and browsing library</string>
+    <string name="overview">Overview</string>
+    <string name="personal_favorites">Favorites</string>
+    <string name="all_bookmarks">All bookmarks</string>
+    <string name="recently_closed_tabs">Recently closed tabs</string>
+    <string name="clear_closed_tabs">Clear recently closed tabs?</string>
+    <string name="clear_closed_note">Remove recovery records from this run. These tabs can no longer be reopened. Open pages and browsing history remain.</string>
+    <string name="no_closed_tabs">Pages you close appear here and can be reopened during this run.</string>
+    <string name="clear_all">Clear all</string>
+    <string name="show_all">Show all</string>
+    <string name="show_less">Show less</string>
+    <string name="today">Today</string>
+    <string name="yesterday">Yesterday</string>
 </resources>

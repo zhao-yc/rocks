@@ -154,4 +154,17 @@
     <string name="clear_search">清空搜索</string>
     <string name="library_no_matches">没有匹配的记录，试试其他关键词。</string>
     <string name="clear_all_history">清空全部历史</string>
+    <string name="address_hub">网址与浏览资料</string>
+    <string name="overview">概览</string>
+    <string name="personal_favorites">个人收藏</string>
+    <string name="all_bookmarks">全部书签</string>
+    <string name="recently_closed_tabs">最近关闭的标签页</string>
+    <string name="clear_closed_tabs">清空最近关闭记录？</string>
+    <string name="clear_closed_note">仅清除本次运行的标签恢复记录，之后无法再恢复这些标签。不会关闭网页或清空历史。</string>
+    <string name="no_closed_tabs">主动关闭的网页会暂存在这里，本次运行内可以恢复。</string>
+    <string name="clear_all">全部清除</string>
+    <string name="show_all">全部显示</string>
+    <string name="show_less">收起</string>
+    <string name="today">今天</string>
+    <string name="yesterday">昨天</string>
 </resources>

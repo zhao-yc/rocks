@@ -122,6 +122,9 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         private set
     val bookmarks = mutableStateListOf<PageRecord>()
     val history = mutableStateListOf<PageRecord>()
+    val addressHub = AddressHubState()
+    val icons = SiteIconRepository(runtime, application.cacheDir, viewModelScope)
+    val closedTabs = mutableStateListOf<ClosedTabSnapshot>()
     private val recentlyClosed = RecentlyClosedTabs()
     private var automaticHome: AutomaticHomeMarker? = null
     var latestClosedTab by mutableStateOf<ClosedTabSnapshot?>(null)
@@ -508,7 +511,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         val removed = tabs.removeAt(index)
         recentlyClosed.record(removed.url, removed.title, index, removed.desktop, cause,
             extension = removed.extensionBase != null)?.let {
-            latestClosedTab = recentlyClosed.latest
+            syncClosedTabs()
             if (showUndoNotice) closeNotice = it
         }
         removed.session.setActive(false)
@@ -533,13 +536,22 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
         if (homeId != null) closeTab(homeId)
         automaticHome = null
         recentlyClosed.consume(entry)
-        latestClosedTab = recentlyClosed.latest
+        syncClosedTabs()
         dismissCloseNotice(entry.closureId)
         save()
         return true
     }
 
     fun dismissCloseNotice(closureId: Long) { if (closeNotice?.closureId == closureId) closeNotice = null }
+
+    /** 所有恢复入口读取同一份有序快照，清空或指定恢复后即时更新。 */
+    private fun syncClosedTabs() {
+        closedTabs.clear(); closedTabs.addAll(recentlyClosed.snapshot)
+        latestClosedTab = recentlyClosed.latest
+    }
+
+    /** 只清除临时恢复记录，并撤下已失效的撤销提示。 */
+    fun clearClosedTabs() { recentlyClosed.clear(); syncClosedTabs(); closeNotice = null }
 
     fun navigate(input: String): Boolean {
         val url = DemoPolicy.inputUrl(input, searchEngine) ?: run { notify(R.string.unsupported_link); return false }
@@ -766,6 +778,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
 
 
     override fun onCleared() {
+        icons.close()
         saveImmediately()
         disposed = true
         sitePermissions.cancel(); finder.close()

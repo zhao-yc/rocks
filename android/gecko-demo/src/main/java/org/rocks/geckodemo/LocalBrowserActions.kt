@@ -92,6 +92,7 @@ internal class RecentlyClosedTabs(private val capacity: Int = 10) {
     private var nextId = 1L
     val latest: ClosedTabSnapshot? get() = entries.firstOrNull()
     val size: Int get() = entries.size
+    val snapshot: List<ClosedTabSnapshot> get() = entries.toList()
 
     /** 自动关闭、批量关闭、原生首页和扩展页均不进入用户的误关恢复记录。 */
     fun record(url: String, title: String, index: Int, desktop: Boolean,
@@ -106,16 +107,19 @@ internal class RecentlyClosedTabs(private val capacity: Int = 10) {
 
     /** 达到标签上限时保留记录，过期撤销提示不能误恢复另一条记录。 */
     fun forRestore(tabCount: Int, replaceHome: Boolean, expectedId: Long? = null): ClosedTabSnapshot? {
-        val entry = latest ?: return null
-        if (expectedId != null && entry.closureId != expectedId) return null
+        val entry = if (expectedId == null) latest else entries.firstOrNull { it.closureId == expectedId }
+        if (entry == null) return null
         if (tabCount >= DemoPolicy.MAX_TABS && !replaceHome) return null
         return entry
     }
 
     /** 新标签成功创建之后才消费记录，失败或上限拦截不会丢失恢复机会。 */
     fun consume(entry: ClosedTabSnapshot) {
-        if (latest?.closureId == entry.closureId) entries.removeFirst()
+        entries.removeAll { it.closureId == entry.closureId }
     }
+
+    /** 清空只移除本次运行的恢复机会，不关闭网页，也不触碰历史。 */
+    fun clear() { entries.clear() }
 }
 
 /** 区分用户停止与真实失败；新文档开始时清除前一次停止标记。 */

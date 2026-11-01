@@ -95,12 +95,13 @@ class LocalBrowserActionsTest {
         val current = closed.record("https://example.org/new", "", 0, false, TabCloseCause.USER)!!
         assertNull(closed.forRestore(DemoPolicy.MAX_TABS, false))
         assertEquals(current, closed.latest)
-        assertNull(closed.forRestore(1, false, old.closureId))
+        assertEquals(old, closed.forRestore(1, false, old.closureId))
         closed.consume(old)
-        assertEquals(2, closed.size)
+        assertEquals(1, closed.size)
+        assertNull(closed.forRestore(1, false, old.closureId))
         assertEquals(current, closed.forRestore(1, false, current.closureId))
         closed.consume(current)
-        assertEquals(old, closed.forRestore(1, false))
+        assertNull(closed.forRestore(1, false))
     }
 
     @Test fun onlyTheExactUntouchedAutomaticHomeCanBeReplaced() {
