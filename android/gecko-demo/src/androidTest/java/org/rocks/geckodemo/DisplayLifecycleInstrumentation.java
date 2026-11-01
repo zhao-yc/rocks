@@ -75,13 +75,23 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
     }
 
     /** 在真实 View 树上检查固定安全区，不依赖已移除的截图或模糊控制器。 */
-    private void verifySafeArea() {
+    private void verifySafeArea() throws ReflectiveOperationException {
         final Activity activity = startActivitySync(new Intent(Intent.ACTION_VIEW, Uri.parse(safeAreaUrl))
                 .setClass(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         final GeckoView[] source = new GeckoView[1];
         try {
+            // 只在测试包读取当前模型，等外部链接完成恢复后再定位对应会话的 View。
+            final java.lang.reflect.Method browserGetter = MainActivity.class.getDeclaredMethod("getBrowser");
+            browserGetter.setAccessible(true);
+            final BrowserModel browser = (BrowserModel) browserGetter.invoke(activity);
             for (int attempt = 0; attempt < 120 && source[0] == null; attempt++) {
-                runOnMainSync(() -> source[0] = findPage(activity.getWindow().getDecorView()));
+                runOnMainSync(() -> {
+                    if (browser.getRestoring()) return;
+                    final BrowserTab current = browser.getCurrent();
+                    if (safeAreaUrl.equals(current.getUrl())) {
+                        source[0] = findPage(activity.getWindow().getDecorView(), current.getSession());
+                    }
+                });
                 SystemClock.sleep(100);
             }
             if (source[0] == null) throw new AssertionError("网页未附着到真实窗口");
@@ -113,14 +123,15 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
     }
 
     /** 只选当前可见且完成布局的网页，避免误取分页预加载的相邻标签。 */
-    private GeckoView findPage(final android.view.View view) {
+    private GeckoView findPage(final android.view.View view, final GeckoSession session) {
         if (!view.isShown()) return null;
         if (view instanceof GeckoView && view.getWidth() > 0 && view.getHeight() > 0
-                && ((GeckoView) view).getSession() != null) return (GeckoView) view;
+                && ((GeckoView) view).getSession() == session
+                && view.getGlobalVisibleRect(new android.graphics.Rect())) return (GeckoView) view;
         if (view instanceof android.view.ViewGroup) {
             final android.view.ViewGroup group = (android.view.ViewGroup) view;
             for (int index = 0; index < group.getChildCount(); index++) {
-                final GeckoView found = findPage(group.getChildAt(index));
+                final GeckoView found = findPage(group.getChildAt(index), session);
                 if (found != null) return found;
             }
         }
