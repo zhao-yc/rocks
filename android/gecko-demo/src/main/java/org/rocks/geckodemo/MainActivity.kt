@@ -247,14 +247,14 @@ private fun BrowserScreen(model: BrowserModel) {
                 }
             })
 
-    LaunchedEffect(model.selectedId, model.tabs.size, draggingTabs) {
+    LaunchedEffect(model.selectedId, model.tabs.size, current.url == DemoPolicy.HOME, draggingTabs) {
         // 模型选择不能因上一段动画尚未结束而被永久跳过；手势结束后再对齐实际内容页。
         // 程序切换立即落在目标页，地址栏拖动仍由原来的跟手动画处理。
         if (draggingTabs) return@LaunchedEffect
         val index = model.tabs.indexOfFirst { it.id == model.selectedId }
         // 插入/删除后旧的稳定 key 会在下一次布局继续移动页码，即使当前页码看起来已经相等。
-        // 每次模型选择变化都明确重置分页锚点，不能用布局前的页码跳过同步。
-        if (index >= 0) pager.scrollToPage(index)
+        // 首页与网页互换时也要重设锚点；请求下一次布局对齐，避免立即测量仍使用旧的数据数量。
+        if (index >= 0) pager.requestScrollToPage(index)
     }
     LaunchedEffect(model.notice) {
         model.notice?.let { message ->
