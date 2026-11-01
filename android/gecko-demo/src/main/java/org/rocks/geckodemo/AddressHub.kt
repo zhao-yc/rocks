@@ -20,6 +20,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -48,6 +50,7 @@ import java.time.format.FormatStyle
 
 /** 地址编辑是独立覆盖层，分类、查询和输入焦点不再依靠键盘是否可见来推断。 */
 @Composable
+@OptIn(ExperimentalComposeUiApi::class)
 internal fun AddressHub(model: BrowserModel, suggestions: List<AddressSuggestion>, snackbar: SnackbarHostState,
     onSubmit: () -> Unit, onSuggestion: (AddressSuggestion) -> Unit, onClose: () -> Unit) {
     val state = model.addressHub
@@ -68,7 +71,14 @@ internal fun AddressHub(model: BrowserModel, suggestions: List<AddressSuggestion
             else -> { searchFocus.requestFocus(); keyboard?.show() }
         }
     }
-    Surface(Modifier.fillMaxSize().semantics { paneTitle = panelTitle }, color = MaterialTheme.colorScheme.background) {
+    Surface(Modifier.fillMaxSize().semantics { paneTitle = panelTitle }
+        .onPreInterceptKeyBeforeSoftKeyboard { event ->
+            // 旧版 Android 在输入法之前处理实体返回键；新版手势由窗口覆盖层回调接管。
+            if (event.key == Key.Back) {
+                if (event.type == KeyEventType.KeyUp && !event.nativeKeyEvent.isCanceled) onClose()
+                true
+            } else false
+        }, color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
             .navigationBarsPadding().imePadding(), horizontalAlignment = Alignment.CenterHorizontally) {

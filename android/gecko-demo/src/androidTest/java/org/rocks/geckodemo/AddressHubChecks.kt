@@ -17,6 +17,7 @@ import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.*
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoSession
@@ -73,6 +74,11 @@ internal object AddressHubChecks {
                 awaitSelectedAddress()
                 main { check(gecko(activity.window.decorView, model.current.session) === original &&
                     (original.width to original.height) == dimensions) { "面板或键盘改变了原网页视图" } }
+                main { WindowInsetsControllerCompat(activity.window, activity.window.decorView).hide(WindowInsetsCompat.Type.ime()) }
+                await("主动隐藏输入法") { !ime() }
+                SystemClock.sleep(750)
+                main { check(model.addressHub.visible) { "输入法隐藏被误当成系统返回" }; model.addressHub.editAddress() }
+                await("重新显示地址输入法") { ime() }
                 setText("面板草稿")
                 await("地址草稿实际同步") { model.addressHub.address.text == "面板草稿" }
                 val selection = Bundle().apply {

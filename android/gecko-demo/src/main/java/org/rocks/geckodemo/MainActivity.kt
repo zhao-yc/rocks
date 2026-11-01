@@ -169,7 +169,6 @@ private fun BrowserScreen(model: BrowserModel) {
     }
     val hub = model.addressHub
     val editing = hub.visible
-    var editorSawKeyboard by remember { mutableStateOf(false) }
     var holdWebViewport by remember { mutableStateOf(false) }
     var editNewTabId by remember { mutableStateOf<Long?>(null) }
     val current = model.current
@@ -282,14 +281,14 @@ private fun BrowserScreen(model: BrowserModel) {
             model.dismissCloseNotice(closed.closureId)
         }
     }
-    LaunchedEffect(editing, hub.input, keyboardVisible, windowFocused) {
-        // 系统返回先由输入法消费时，等收起动画结束后一起退出编辑。
-        // 窗口失焦时解除观察，切换输入法或临时离开应用不会因此丢弃草稿。
-        when {
-            !editing || !windowFocused || hub.input == HubInput.NONE -> editorSawKeyboard = false
-            keyboardVisible -> editorSawKeyboard = true
-            editorSawKeyboard -> { delay(150); finishEditing() }
-        }
+    DisposableEffect(editing, windowFocused, keyboardVisible) {
+        // 地址资料是覆盖层，明确接收返回，不再把输入法重连、旋转或隐藏误当成返回。
+        if (editing && windowFocused && android.os.Build.VERSION.SDK_INT >= 33) {
+            val dispatcher = (context as ComponentActivity).onBackInvokedDispatcher
+            val callback = android.window.OnBackInvokedCallback { finishEditing() }
+            dispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_OVERLAY, callback)
+            onDispose { dispatcher.unregisterOnBackInvokedCallback(callback) }
+        } else onDispose { }
     }
     LaunchedEffect(editing, keyboardVisible) {
         if (!editing && !keyboardVisible) holdWebViewport = false
