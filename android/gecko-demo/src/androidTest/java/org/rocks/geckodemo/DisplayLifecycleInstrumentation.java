@@ -83,13 +83,25 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
     }
 
     /** 在真实 View 树上检查固定安全区，不依赖已移除的截图或模糊控制器。 */
-    private void verifySafeArea() {
+    private void verifySafeArea() throws ReflectiveOperationException {
         final Activity activity = startActivitySync(new Intent(Intent.ACTION_VIEW, Uri.parse(safeAreaUrl))
                 .setClass(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         final GeckoView[] source = new GeckoView[1];
+        final GeckoSession[] targetSession = new GeckoSession[1];
         try {
+            // 只在测试包读取当前模型，等外部链接完成恢复后再定位对应会话的 View。
+            final java.lang.reflect.Method browserGetter = MainActivity.class.getDeclaredMethod("getBrowser");
+            browserGetter.setAccessible(true);
+            final BrowserModel browser = (BrowserModel) browserGetter.invoke(activity);
             for (int attempt = 0; attempt < 120 && source[0] == null; attempt++) {
-                runOnMainSync(() -> source[0] = findPage(activity.getWindow().getDecorView()));
+                runOnMainSync(() -> {
+                    if (browser.getRestoring()) return;
+                    final BrowserTab current = browser.getCurrent();
+                    if (safeAreaUrl.equals(current.getUrl())) {
+                        targetSession[0] = current.getSession();
+                        source[0] = findPage(activity.getWindow().getDecorView(), targetSession[0]);
+                    }
+                });
                 SystemClock.sleep(100);
             }
             if (source[0] == null) throw new AssertionError("网页未附着到真实窗口");
@@ -111,24 +123,25 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
                     throw new AssertionError("顶部安全区未恰好避让一次或视口尺寸错误");
                 }
             });
-            scrollAndAwait(source[0], false);
-            assertStableGeometry(source[0], geometry[0], geometry[1]);
-            scrollAndAwait(source[0], true);
-            assertStableGeometry(source[0], geometry[0], geometry[1]);
+            scrollAndAwait(targetSession[0], false);
+            assertStableGeometry(activity, targetSession[0], geometry[0], geometry[1]);
+            scrollAndAwait(targetSession[0], true);
+            assertStableGeometry(activity, targetSession[0], geometry[0], geometry[1]);
         } finally {
             runOnMainSync(activity::finish);
         }
     }
 
     /** 只选当前可见且完成布局的网页，避免误取分页预加载的相邻标签。 */
-    private GeckoView findPage(final android.view.View view) {
+    private GeckoView findPage(final android.view.View view, final GeckoSession session) {
         if (!view.isShown()) return null;
         if (view instanceof GeckoView && view.getWidth() > 0 && view.getHeight() > 0
-                && ((GeckoView) view).getSession() != null) return (GeckoView) view;
+                && ((GeckoView) view).getSession() == session
+                && view.getGlobalVisibleRect(new android.graphics.Rect())) return (GeckoView) view;
         if (view instanceof android.view.ViewGroup) {
             final android.view.ViewGroup group = (android.view.ViewGroup) view;
             for (int index = 0; index < group.getChildCount(); index++) {
-                final GeckoView found = findPage(group.getChildAt(index));
+                final GeckoView found = findPage(group.getChildAt(index), session);
                 if (found != null) return found;
             }
         }
@@ -136,12 +149,12 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
     }
 
     /** 等到真实滚动回调，防止长页尚未加载或未实际移动时误报几何回归通过。 */
-    private void scrollAndAwait(final GeckoView view, final boolean toTop) {
+    private void scrollAndAwait(final GeckoSession target, final boolean toTop) {
         final java.util.concurrent.atomic.AtomicBoolean reached = new java.util.concurrent.atomic.AtomicBoolean();
         final GeckoSession.CompositorScrollDelegate[] previous = new GeckoSession.CompositorScrollDelegate[1];
         runOnMainSync(() -> {
-            previous[0] = view.getSession().getCompositorScrollDelegate();
-            view.getSession().setCompositorScrollDelegate(new GeckoSession.CompositorScrollDelegate() {
+            previous[0] = target.getCompositorScrollDelegate();
+            target.setCompositorScrollDelegate(new GeckoSession.CompositorScrollDelegate() {
                 @Override
                 public void onScrollChanged(final GeckoSession session, final GeckoSession.ScrollPositionUpdate update) {
                     if (previous[0] != null) previous[0].onScrollChanged(session, update);
@@ -152,23 +165,29 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
         try {
             for (int attempt = 0; attempt < 120 && !reached.get(); attempt++) {
                 if (attempt % 5 == 0) runOnMainSync(() -> {
-                    if (toTop) view.getSession().getPanZoomController().scrollToTop();
-                    else view.getSession().getPanZoomController().scrollTo(ScreenLength.zero(),
+                    if (toTop) target.getPanZoomController().scrollToTop();
+                    else target.getPanZoomController().scrollTo(ScreenLength.zero(),
                             ScreenLength.fromPixels(300), PanZoomController.SCROLL_BEHAVIOR_AUTO);
                 });
                 SystemClock.sleep(100);
             }
             if (!reached.get()) throw new AssertionError("未收到真实网页滚动回调");
         } finally {
-            runOnMainSync(() -> view.getSession().setCompositorScrollDelegate(previous[0]));
+            runOnMainSync(() -> target.setCompositorScrollDelegate(previous[0]));
         }
     }
 
     /** 连续观察异步滚动提交，旧下穿实现会在此暴露位置变化。 */
-    private void assertStableGeometry(final GeckoView view, final int expectedTop, final int expectedHeight) {
+    private void assertStableGeometry(final Activity activity, final GeckoSession session,
+            final int expectedTop, final int expectedHeight) {
+        final boolean[] observed = new boolean[1];
         for (int attempt = 0; attempt < 20; attempt++) {
             SystemClock.sleep(100);
             runOnMainSync(() -> {
+                // Compose 可替换 View，回归始终定位同一会话当前附着的真实视图。
+                final GeckoView view = findPage(activity.getWindow().getDecorView(), session);
+                if (view == null) return;
+                observed[0] = true;
                 final int[] location = new int[2];
                 view.getLocationOnScreen(location);
                 if (location[1] != expectedTop || view.getHeight() != expectedHeight
@@ -177,5 +196,6 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
                 }
             });
         }
+        if (!observed[0]) throw new AssertionError("滚动后未找到当前会话的可见网页");
     }
 }
