@@ -6,24 +6,7 @@ import android.view.ViewTreeObserver
 import android.view.WindowInsets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import org.mozilla.geckoview.GeckoDisplay
-import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
-
-/** 保留 GeckoView 正常取得的 Display 引用，只用于公开的安全区 API，不另行取得显示所有权。 */
-internal class BrowserGeckoSession : GeckoSession() {
-    var attachedDisplay: GeckoDisplay? = null
-        private set
-
-    /** 复用 GeckoView 发起的唯一显示连接。 */
-    override fun acquireDisplay(): GeckoDisplay = super.acquireDisplay().also { attachedDisplay = it }
-
-    /** 与 GeckoView 的释放保持一致，不能留下失效的显示引用。 */
-    override fun releaseDisplay(display: GeckoDisplay) {
-        if (attachedDisplay === display) attachedDisplay = null
-        super.releaseDisplay(display)
-    }
-}
 
 /** 宿主已避让顶部和两侧后，不再让 viewport-fit=cover 网页通过 CSS env 重复避让。 */
 internal class SafeGeckoView(context: Context) : GeckoView(context) {

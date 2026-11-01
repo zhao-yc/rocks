@@ -40,7 +40,7 @@ jobs:
       - name: Android lint
         run: gradle -p android/gecko-demo lintDebug --stacktrace
       - name: Assemble APK
-        run: gradle -p android/gecko-demo assembleDebug --stacktrace
+        run: gradle -p android/gecko-demo assembleDebug assembleDebugAndroidTest --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -55,6 +55,12 @@ jobs:
         with:
           name: rocks-gecko-demo-apk
           path: android/gecko-demo/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocks-gecko-lifecycle-test-apk
+          path: android/gecko-demo/build/outputs/apk/androidTest/debug/*.apk
           if-no-files-found: error
           retention-days: 7
       - name: Remove private signing material
