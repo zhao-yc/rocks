@@ -37,8 +37,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -53,6 +59,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -406,7 +413,7 @@ private fun GeckoPage(session: GeckoSession, modifier: Modifier, bottomObscured:
     }
 }
 
-/** 模糊延展只画在已留出的安全区，不接收触摸，也不覆盖网页中的可点击控件。 */
+/** 状态栏模糊在网页上沿渐隐；绘制层不接收触摸，也不改变网页尺寸和安全区。 */
 @Composable
 private fun TopStatusArea(chrome: ImmersiveStatusBar, scope: BrowserPageScope?, backgroundColor: Int,
     height: Int, targetStrength: Float) {
@@ -414,11 +421,32 @@ private fun TopStatusArea(chrome: ImmersiveStatusBar, scope: BrowserPageScope?, 
     val image = chrome.imageFor(scope, height)
     val background = Color(backgroundColor)
     val density = LocalDensity.current
+    // 仅让效果越过安全区下缘，留白仍只消费一次；回顶时整个渐隐尾部消失。
+    val fadeHeight = if (scope != null && height > 0) 18.dp else 0.dp
     SideEffect { chrome.updateAppearance(backgroundColor, strength, image != null) }
-    Canvas(Modifier.fillMaxWidth().height(with(density) { height.toDp() })) {
-        drawRect(background)
-        if (image != null && strength > 0f) clipRect {
-            drawImage(image, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()), alpha = strength)
+    Canvas(Modifier.fillMaxWidth().height(with(density) { height.toDp() } + fadeHeight)) {
+        val safeHeight = height.toFloat()
+        drawRect(background, size = Size(size.width, safeHeight))
+        if (image != null && strength > 0f && height > 0) {
+            clipRect(bottom = safeHeight) {
+                drawImage(image, dstSize = IntSize(size.width.roundToInt(), height), alpha = strength)
+            }
+            val tailHeight = (size.height - safeHeight).roundToInt()
+            if (tailHeight > 0) clipRect(top = safeHeight) {
+                // 单独的小图层承接最后一行模糊颜色；DstIn 只消隐效果，不擦除底下的网页。
+                drawIntoCanvas { canvas ->
+                    canvas.saveLayer(Rect(0f, safeHeight, size.width, size.height), Paint())
+                    drawImage(image, srcOffset = IntOffset(0, image.height - 1), srcSize = IntSize(image.width, 1),
+                        dstOffset = IntOffset(0, height), dstSize = IntSize(size.width.roundToInt(), tailHeight))
+                    drawRect(brush = Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = strength),
+                        0.35f to Color.Black.copy(alpha = strength * 0.82f),
+                        1f to Color.Transparent,
+                        startY = safeHeight, endY = size.height),
+                        blendMode = BlendMode.DstIn)
+                    canvas.restore()
+                }
+            }
         }
     }
 }

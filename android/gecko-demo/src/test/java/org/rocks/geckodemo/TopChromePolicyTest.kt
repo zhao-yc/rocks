@@ -47,7 +47,12 @@ class TopChromePolicyTest {
         val frame = TopChromePolicy.frame(pixels, 32, 12, dark)
         assertArrayEquals(original, pixels)
         assertEquals(white, frame.background)
-        assertTrue(frame.pixels.all { (it ushr 24) == 255 && (it and 255) >= 180 })
+        assertTrue(frame.pixels.all { (it ushr 24) == 255 })
+        // 以相邻像素的对比度验证细字已经模糊，不再用强白遮罩的亮度作为通过条件。
+        assertTrue((0 until 12).all { y -> (1 until 32).all { x ->
+            kotlin.math.abs((frame.pixels[y * 32 + x] and 255) -
+                (frame.pixels[y * 32 + x - 1] and 255)) < 48
+        } })
         assertTrue(frame.pixels.toSet().size > 1)
         val solid = TopChromePolicy.frame(IntArray(7 * 3) { dark }, 7, 3, white)
         assertTrue(solid.pixels.all { it == dark })
@@ -62,6 +67,20 @@ class TopChromePolicyTest {
         assertEquals(1f, TopChromePolicy.strength(1000f), 0f)
         assertEquals(white, TopChromePolicy.blend(white, dark, 0f))
         assertEquals(dark, TopChromePolicy.blend(white, dark, 1f))
+    }
+
+    @Test fun scrollingSearchButtonRetainsBlurredColorUnderTheStatusBar() {
+        // 白色页头下的蓝色搜索按钮应透出模糊色彩，不能被整块白色遮罩洗掉。
+        val blue = 0xFF4D68F4.toInt()
+        val pixels = IntArray(64 * 32) { index ->
+            if (index / 64 < 2 || index % 64 < 40) white else blue
+        }
+        val frame = TopChromePolicy.frame(pixels, 64, 32, white)
+        assertEquals(white, frame.background)
+        val lowerEdge = frame.pixels.last()
+        assertTrue((lowerEdge and 255) > (lowerEdge ushr 16 and 255) + 70)
+        assertTrue((lowerEdge ushr 16 and 255) < 150)
+        assertTrue(TopChromePolicy.darkIcons(frame.average, true))
     }
 
     @Test fun lateFramesCannotCrossTabsDocumentsRotationOrBackgrounding() {

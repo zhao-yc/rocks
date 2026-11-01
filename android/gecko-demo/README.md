@@ -1,6 +1,6 @@
 # Rocks Gecko development preview
 
-The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.4-gecko (code 8) can update the existing Gecko preview without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
+The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.5-gecko (code 9) can update the existing Gecko preview without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
 
 ## 0.4.4 display lifecycle crash fix
 
@@ -16,7 +16,7 @@ Normal browsing now places web content below the Android status-bar/cutout safe 
 
 An independent native top surface follows the dominant background of the rendered page's top edge. Text and logos are filtered by a two-thirds color consensus; an ambiguous photograph retains the last valid color. New documents start white, while the native start page uses the Rocks surface color. System icons follow the final painted background with contrast hysteresis.
 
-After scrolling away from the top, a heavily blurred edge extension gradually appears inside the reserved status-bar area, reaching full strength at 24 CSS pixels and fading on return. It never moves/resizes the GeckoView or intercepts website controls. This approximates Safari's visible behavior using Gecko's rendering; it does not reproduce WebKit's DOM-based color rules pixel for pixel.
+After scrolling away from the top, a blurred edge extension gradually appears inside the reserved status-bar area, reaching full strength at 24 CSS pixels and fading on return. Version 0.4.5 keeps more of the blurred webpage color visible and adds an 18dp transparent fade below the safe area. An isolated graphics layer masks only that short effect tail; it never erases the underlying page, moves/resizes the GeckoView, or intercepts website controls. Returning to the top removes the tail. This approximates Safari's visible behavior using Gecko's rendering; it does not reproduce WebKit's DOM-based color rules pixel for pixel.
 
 Sampling uses PixelCopy on the Gecko TextureView's own Surface, not the app window, so the browser overlay cannot feed back into its input. Compositor draw events drive small captures (at most 128×64 pixels), with at least 67 ms between starts and one capture/processing request in flight. Blur runs off the UI thread and also works on Android 10/11. Pause, document/tab changes, view replacement, rotation and fullscreen invalidate old results; the current source is checked again at completion. Idle pages have no polling loop. Captures are recycled after processing, display frames are held only in memory, and no image is saved, logged or transmitted. No page script, bridge or permission is added.
 

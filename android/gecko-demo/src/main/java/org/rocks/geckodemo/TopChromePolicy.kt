@@ -36,8 +36,9 @@ internal object TopChromePolicy {
         var blurred = pixels.copyOf()
         repeat(3) { blurred = blur(blur(blurred, width, height, horizontal = true), width, height, horizontal = false) }
         for (y in 0 until height) {
-            // 顶部强遮蔽保证时间和电量清晰，下缘保留少量模糊纹理以柔和衔接网页。
-            val texture = 0.06f + 0.24f * y / (height - 1).coerceAtLeast(1)
+            // 保留状态栏下方可辨识的模糊色彩；上方遮蔽较强，下缘承接真正的透明渐隐。
+            val position = y.toFloat() / (height - 1).coerceAtLeast(1)
+            val texture = 0.28f + 0.54f * position * position * (3f - 2f * position)
             for (x in 0 until width) {
                 val index = y * width + x
                 blurred[index] = blend(background, blurred[index], texture)

@@ -23,8 +23,8 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       SOURCE_RUN: ${{ inputs.source_run_id }}
-      VERSION: '0.4.4'
-      VERSION_CODE: '8'
+      VERSION: '0.4.5'
+      VERSION_CODE: '9'
     steps:
       - uses: actions/checkout@v4
       - name: 核对当前提交的 CI 与固定签名检查
@@ -118,7 +118,7 @@ jobs:
           cp "$GITHUB_WORKSPACE/docs/releases/gecko-$VERSION.md" notes.md
           printf '\n源码提交：`%s`。\n构建检查：https://github.com/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_REPOSITORY" "$SOURCE_RUN" >> notes.md
           gh release create "$TAG" "$APK" "$APK.sha256" --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" --title "Rocks Gecko $VERSION — 修复网页生命周期闪退" \
+            --target "$GITHUB_SHA" --title "Rocks Gecko $VERSION — 顶部模糊透明渐变" \
             --draft --prerelease --latest=false --notes-file notes.md
           # 上传后重新下载草稿附件，校验实际字节，再将其转为公开预览版。
           mkdir verified
