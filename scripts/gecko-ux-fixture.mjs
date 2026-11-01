@@ -50,14 +50,14 @@ function iconRoute(request, response, negative = false) {
     const name = route.split('/')[2];
     const target = ({ png: '/icons/green.png', ico: '/icons/green.ico', relative: '../../icons/green.png',
       redirect: '/icons/redirect', loop: '/icons/loop', timeout: '/icons/slow', oversized: '/icons/oversized',
-      broken: '/icons/broken', failure: '/icons/broken' })[name];
+      broken: '/icons/broken', failure: '/icons/broken', parallel: '/icons/wait' })[name];
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     response.end(`<html><head><title>图标夹具</title>${target ? `<link rel="icon" href="${target}">` : ''}</head><body>图标夹具</body></html>`);
   } else if (negative) { response.writeHead(404); response.end(); }
   else if (route === '/icons/redirect' || route === '/icons/loop') {
     response.writeHead(302, { Location: route === '/icons/loop' ? '/icons/loop' : '/icons/green.png' }); response.end();
-  } else if (route === '/icons/slow') {
-    const timer = setTimeout(() => response.end(png), 8000);
+  } else if (route === '/icons/slow' || route === '/icons/wait') {
+    const timer = setTimeout(() => response.end(png), route === '/icons/wait' ? 200 : 8000);
     response.on('close', () => clearTimeout(timer));
   } else if (route === '/icons/oversized') { response.end(Buffer.alloc(256 * 1024 + 1)); }
   else if (route === '/icons/broken') { response.end('无法解码的测试图标'); }

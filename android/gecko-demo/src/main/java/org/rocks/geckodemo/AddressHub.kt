@@ -296,7 +296,7 @@ private fun HubEmpty(empty: Boolean, message: String? = null) {
 private fun SiteIcon(repository: SiteIconRepository, url: String, title: String, size: Dp) {
     var visible by remember(url) { mutableStateOf(false) }
     var image by remember(url) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    LaunchedEffect(repository, url, visible) { if (visible) image = repository.load(url) }
+    LaunchedEffect(repository, url, visible, repository.active) { if (visible && repository.active) image = repository.load(url) }
     val label = title.trim().ifEmpty { displayAddress(url) }.ifEmpty { "?" }
     val initial = label.substring(0, label.offsetByCodePoints(0, 1)).uppercase()
     Box(Modifier.size(size).clip(RoundedCornerShape(size / 4)).background(MaterialTheme.colorScheme.primaryContainer)

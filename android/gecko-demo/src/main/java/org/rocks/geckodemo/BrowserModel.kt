@@ -581,6 +581,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
     }
 
     fun setForeground(value: Boolean) {
+        icons.setForeground(value)
         foreground = value
         if (value) { sitePermissions.resumed(); finder.resumed() } else sitePermissions.backgrounded()
         if (!value) { answerQuestion(false); closePopup(); files.backgrounded(); linkMenu = null; saveImmediately() }

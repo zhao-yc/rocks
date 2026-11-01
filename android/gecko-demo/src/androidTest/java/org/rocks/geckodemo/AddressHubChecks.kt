@@ -47,6 +47,7 @@ internal object AddressHubChecks {
             try {
                 await("夹具网页加载") { !model.restoring && model.current.url == base + "one" && !model.current.loading }
                 main {
+                    model.closeOtherTabs(); model.clearClosedTabs()
                     model.bookmarks.clear()
                     model.bookmarks.add(PageRecord(base + "one", "面板收藏", System.currentTimeMillis()))
                 }
@@ -131,9 +132,13 @@ internal object AddressHubChecks {
             check(loadIcon(negative) == null) { "真实失败没有使用首字回退" }
             val failureCount = stats().getInt("requests")
             check(loadIcon(negative) == null && stats().getInt("requests") == failureCount) { "负缓存仍重复发起请求" }
+            val parallel = AtomicReference<List<Bitmap?>?>()
+            scope.launch { parallel.set((1..3).map { index -> async { model.icons.load(base + "icon-case/parallel?entry=$index") } }.awaitAll()) }
+            await("并发图标订阅") { parallel.get() != null }
+            check(parallel.get()!!.all { it != null }) { "并发图标加载失败" }
             val result = stats()
             check(!result.getBoolean("sensitive")) { "图标请求携带了 Cookie、认证或来源地址" }
-            check(result.getInt("maximumActive") <= 2) { "图标请求超过并发限制" }
+            check(result.getInt("maximumActive") == 2) { "图标夹具没有验证实际并发上限" }
             check(result.getJSONObject("paths").getInt("/icons/loop") == 4) { "没有执行重定向上限" }
         }
 

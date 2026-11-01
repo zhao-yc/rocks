@@ -106,6 +106,7 @@ internal class SiteIconDiskCache(private val directory: File, private val limit:
         } finally { temporary.delete() }
     }
 
+    /** 只允许摘要键，调用者无法构造目录穿越路径。 */
     private fun fileFor(key: String): File {
         require(key.matches(Regex("[a-f0-9]{64}")))
         return File(directory, "$key.icon")
@@ -116,11 +117,13 @@ internal class SiteIconDiskCache(private val directory: File, private val limit:
 internal class SiteIconMemoryCache<T>(private val limit: Int, private val weight: (T) -> Int) {
     private data class Entry<T>(val value: T?, val expires: Long)
     private val entries = LinkedHashMap<String, Entry<T>>(16, .75f, true)
+    /** 命中的失败记录与不存在记录必须可区分，避免失败网站反复请求。 */
     @Synchronized fun get(key: String, now: Long): Pair<Boolean, T?> {
         val entry = entries[key] ?: return false to null
         if (entry.expires <= now) { entries.remove(key); return false to null }
         return true to entry.value
     }
+    /** 插入后按访问先后淘汰，不主动回收已借给界面的对象。 */
     @Synchronized fun put(key: String, value: T?, expires: Long) {
         entries[key] = Entry(value, expires)
         var total = entries.values.sumOf { it.value?.let(weight) ?: 1 }
@@ -130,5 +133,6 @@ internal class SiteIconMemoryCache<T>(private val limit: Int, private val weight
             iterator.remove()
         }
     }
+    /** 生命周期结束时释放仓库的强引用。 */
     @Synchronized fun clear() { entries.clear() }
 }

@@ -2,6 +2,9 @@ package org.rocks.geckodemo
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -25,9 +28,12 @@ internal class SiteIconRepository(runtime: GeckoRuntime, cacheDir: File, private
     private val lock = Mutex()
     private data class Pending(val work: Deferred<Bitmap?>, var users: Int = 0)
     private val pending = mutableMapOf<String, Pending>()
+    var active by mutableStateOf(true)
+        private set
 
     /** 同网址共享请求；最后一个可见使用者离开后取消未完成工作，迟到结果不会绑定到其他行。 */
     suspend fun load(url: String): Bitmap? {
+        if (!active) return null
         val safe = SiteIconPolicy.safeUrl(url) ?: return null
         val key = SiteIconPolicy.key(safe)
         memory.get(key, System.currentTimeMillis()).let { if (it.first) return it.second }
@@ -139,5 +145,11 @@ internal class SiteIconRepository(runtime: GeckoRuntime, cacheDir: File, private
     }
 
     /** 不主动回收仍可能被 Compose 绘制的位图，仅释放仓库引用。 */
-    fun close() { pending.values.forEach { it.work.cancel() }; pending.clear(); memory.clear() }
+    fun close() { setForeground(false); pending.clear(); memory.clear() }
+
+    /** 后台窗口不再订阅网络资源；回前台由实际可见的图块重新订阅。 */
+    fun setForeground(value: Boolean) {
+        active = value
+        if (!value) pending.values.forEach { it.work.cancel() }
+    }
 }
