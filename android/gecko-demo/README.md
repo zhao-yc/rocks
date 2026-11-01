@@ -2,6 +2,16 @@
 
 The accepted Android browser direction is **GeckoView 158.0.20261021001945**, native Compose UI and Firefox WebExtensions. This standalone project keeps application ID `org.rocks.browser.geckodemo` and the existing fixed development certificate. Version 0.4.5-gecko (code 9) can update the existing Gecko preview without uninstalling it. Android 10+, ARM64 phones. This is not an official Mozilla product.
 
+## Everyday browsing improvements
+
+- Opening the address editor selects the full URL and shows up to six recent visits. Editing the text matches open tabs, bookmarks and history locally, with URL deduplication and direct switching to an existing tab. Suggestions send no network requests. Clear, cancel, outside tap and input-specific validation are available.
+- Long-press the tab button for new, close and reopen actions. New tabs focus the address editor. The overview starts near the selected tab and includes its own undo control; closing other tabs requires confirmation.
+- The last ten manually closed regular pages can be reopened during this process, with their title, position and desktop mode. Reopening reloads the URL, without restoring forms, scroll position or navigation stacks. Restart clears the closed-tab list. Programmatic closures, extension pages and bulk closures are excluded; reaching the tab limit does not consume a recovery record.
+- Bookmarks and history have independent title/URL search fields and distinct empty/no-match states. Clearing history always clears the entire URL list, including filtered-out records; cookies and website storage remain.
+- The reload button becomes Stop while loading. User cancellation is distinguished from real network/certificate errors.
+
+These changes keep the portable JSON v1 contract, package and signing configuration unchanged. They are source improvements for the next preview, not a new public release.
+
 ## 0.4.4 display lifecycle crash fix
 
 GeckoView can release a null display before attachment or after detachment, even though GeckoSession annotates the parameter as non-null. The display-tracking subclass now preserves Gecko's Java runtime contract instead of inserting a Kotlin null check. Ownership errors still reach Gecko's original validation; the tracked reference is cleared only after a successful release. This fixes the crash reproduced with the public 0.4.3 APK when opening pages and restoring tabs.

@@ -19,8 +19,9 @@ internal object LocalBrowserSearch {
     /** 将核心解析器的诊断映射为可翻译的界面状态，网址规则仍只由核心解析器维护。 */
     fun resolve(input: String, engine: SearchEngine): AddressInputResult {
         val result = AddressResolver.resolve(input, engine)
+        val resolvedUrl = result.url
         // 中文搜索词编码后也可能超过核心网址上限；此时直接给出输入诊断。
-        if (result.url != null && !AddressResolver.isWebUrl(result.url))
+        if (resolvedUrl != null && !AddressResolver.isWebUrl(resolvedUrl))
             return AddressInputResult(null, AddressInputError.INVALID_INPUT)
         val error = when (result.error) {
             null -> null
@@ -29,7 +30,7 @@ internal object LocalBrowserSearch {
             "仅支持 HTTP 和 HTTPS 网址" -> AddressInputError.UNSUPPORTED_SCHEME
             else -> AddressInputError.INVALID_INPUT
         }
-        return AddressInputResult(result.url, error)
+        return AddressInputResult(resolvedUrl, error)
     }
 
     /** 空输入显示最近访问；输入后按标签、书签、历史的优先级匹配并去重。 */

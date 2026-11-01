@@ -187,7 +187,7 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
     var addressWidth by remember { mutableFloatStateOf(1f) }
     var gestureStart by remember { mutableIntStateOf(0) }
     var draggingTabs by remember { mutableStateOf(false) }
-    var bottomObscured by remember { mutableIntStateOf(0) }
+    var toolbarHeight by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val topHeight = if (model.fullScreen) 0 else WindowInsets.safeDrawing.getTop(density)
     val pageScope = BrowserPageScope(current.id, current.documentRevision, current.url)
@@ -207,6 +207,7 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
     val keyboard = LocalSoftwareKeyboardController.current
     val keyboardVisible = WindowInsets.ime.getBottom(density) > 0
     val navigationBottom = WindowInsets.navigationBars.getBottom(density)
+    val bottomObscured = toolbarHeight + navigationBottom + with(density) { 16.dp.roundToPx() }
     val touchExploration = rememberTouchExploration()
     val chromePinned = editing || keyboardVisible || showExtensions || showTabs || showMenu || showTabActions || library != null ||
         model.popup != null || model.question != null || model.linkMenu != null || model.files.offer != null ||
@@ -380,8 +381,7 @@ private fun BrowserScreen(model: BrowserModel, topChrome: ImmersiveStatusBar) {
                                 type = "text/plain"; putExtra(Intent.EXTRA_TEXT, current.url)
                             }, shareLabel))
                         },
-                        onBarHeight = { barHeight -> bottomObscured = barHeight + navigationBottom +
-                            with(density) { 16.dp.roundToPx() } },
+                        onBarHeight = { toolbarHeight = it },
                         modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 600.dp).fillMaxWidth()
                             .navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp))
                 }
