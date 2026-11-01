@@ -1,7 +1,9 @@
 /* 内置隔离脚本：不接收网页消息、不修改 DOM，只读取布局和背景颜色。 */
 (() => {
   if (window !== window.top || !/^https?:$/.test(location.protocol)) return;
-  const documentId = crypto.randomUUID();
+  // 普通 HTTP 页面没有 randomUUID；getRandomValues 在非安全上下文仍可用。
+  const documentId = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() :
+    Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join('');
   let port = null, timer = null, lastRun = -Infinity, lastResult = null;
   let retryTimer = null, retries = 0;
   let dirty = true, candidates = [], observing = false;

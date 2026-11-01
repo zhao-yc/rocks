@@ -62,7 +62,7 @@ test('a fresh page context restores extension settings from storage', async () =
 const bottomScript = readFileSync(new URL('../android/gecko-demo/src/main/assets/bottom-bar/content.js', import.meta.url), 'utf8');
 
 /** 用真实脚本和可控布局/时间测试检测逻辑，不把此结果当成 Gecko 真机验收。 */
-function bottomHarness() {
+function bottomHarness(secure = true) {
   let now = 0, focused = true, hit = null, observerCallback;
   const tasks = new Map(), listeners = new Map(), reports = [], ports = [];
   let nextTimer = 0;
@@ -87,7 +87,7 @@ function bottomHarness() {
     ports.push(port); return port;
   } } };
   vm.runInNewContext(bottomScript, { window, document, location: { protocol: 'https:' }, browser,
-    crypto: { randomUUID: () => 'test-document-1' }, getComputedStyle: node => node.style,
+    crypto: secure ? { randomUUID: () => 'test-document-1' } : { getRandomValues: values => values.fill(17) }, getComputedStyle: node => node.style,
     MutationObserver: class { constructor(callback) { observerCallback = callback; } observe() {} disconnect() {} },
     performance: { now: () => now }, setTimeout: (callback, delay) => { const id = ++nextTimer; tasks.set(id, { callback, due: now + delay }); return id; },
     clearTimeout: id => tasks.delete(id) });
@@ -120,6 +120,12 @@ test('底栏脚本上报白色与深色纯色，动态删除后恢复无候选',
   bar.style.backgroundColor = 'rgb(20, 30, 40)'; h.mutate(); h.advance();
   assert.deepEqual(h.reports.at(-1).bars[0].color, [20, 30, 40]);
   bar.isConnected = false; h.mutate(); h.advance(); assert.deepEqual(h.reports.at(-1).bars, []);
+});
+
+test('非安全 HTTP 上下文没有 randomUUID 时仍可检测', () => {
+  const h = bottomHarness(false); h.add({ position: 'fixed', backgroundColor: 'rgb(255, 255, 255)' });
+  h.advance(); assert.equal(h.reports[0].documentId, '11'.repeat(16));
+  assert.deepEqual(h.reports[0].bars[0].color, [255, 255, 255]);
 });
 
 test('普通色块、悬浮小按钮、隐藏与遮挡元素不会成为背景来源', () => {

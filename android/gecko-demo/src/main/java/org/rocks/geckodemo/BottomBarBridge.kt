@@ -57,7 +57,7 @@ internal class BottomBarBridge(
                         if (parsed == null || !gate.accepts(page(session), scope, parsed.documentId)) {
                             clear(); return
                         }
-                        report = parsed
+                        report = if (paused) null else parsed
                         updateColor()
                     }
                     override fun onDisconnect(source: WebExtension.Port) { if (port === source) clear() }
@@ -77,6 +77,8 @@ internal class BottomBarBridge(
     fun setPaused(value: Boolean) {
         if (paused == value) return
         paused = value; report = null; color = null
+        // 关闭键盘后重新测量，避免末次 resize 先于原生 IME 回调而丢失结果。
+        if (!value) clear()
     }
 
     /** 记录当前 Gecko 几何；矩阵转换同时处理缩放、横屏和顶部安全区。 */
