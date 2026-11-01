@@ -1,3 +1,17 @@
+# Gecko 0.4.4 闪退修复与本机模拟器验证（2026-11-01）
+
+- 用户报告手机闪退后，在本机已有 Android 15 / API 35 镜像安装公开 0.4.3，复现网页切换和标签恢复中的主线程空指针。根因为 Kotlin 覆写 `releaseDisplay` 的非空检查拒绝了 GeckoView 实际传入的空连接；改用 Java 保留引擎运行时契约及所有权校验。
+- 发布源码 `9aee911b19fe3870503baf93b81bcd59f469bad6`，版本 `0.4.4-gecko` / versionCode 8。包名、固定开发证书不变，可直接覆盖安装，不清除浏览数据。
+- [Gecko CI](https://github.com/zhao-yc/rocks/actions/runs/41263984717) 成功，覆盖扩展脚本、`:core:test testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest`、实际固定签名及清理。[原 WebView 回归](https://github.com/zhao-yc/rocks/actions/runs/41263984641) 同样成功。
+- 新增真实 Gecko 显示连接生命周期 instrumentation：同测试包在原版 0.4.3 上复现相同空指针；功能分支修复包和实际 main ARM64 包均为 3 项通过，原始返回码 `-1`。覆盖安装保留已有标签，未通过清除应用数据规避恢复问题。
+- 为排除 ARM 转译/JIT 崩溃，显式构建同运行时代码的原生 x86_64 验证包，[构建与签名校验](https://github.com/zhao-yc/rocks/actions/runs/41264099220) 成功。模拟器完成英纵首页/菜单、百度首页、滚动回顶、横竖屏和后台返回，最终崩溃缓冲区为空。网页 Logo、头像和菜单均位于系统状态栏下方，背景保持白色。
+- 不把 ARM64 转译环境判为完整通过：曾捕获 `libndk_translation.so` 原生崩溃。原生模拟器也出现过首帧未绘制/黑帧，触摸后显示正常；首帧性能、手机挖孔/键盘/Dark Reader/全屏及流畅度仍待真机验证。详细证据与边界见 [顶部浏览体验验收](顶部浏览体验验收.md)。
+- [发布校验](https://github.com/zhao-yc/rocks/actions/runs/41264521226) 成功：仅使用 main ARM64 产物，核对来源、ZIP 摘要、实际证书、包名、版本及引擎，上传草稿后重新下载完整 APK 核对字节，再公开预览版。
+- [下载 0.4.4 APK](https://github.com/zhao-yc/rocks/releases/download/v0.4.4-gecko/rocks-gecko-0.4.4.apk)：164994935 字节，SHA-256 `361f57a55c43c0dcdaa115d57c34a5dc61f3d4f3531f8af456c6afddb6f0603c`，与本机实际安装回归的 main 包相同。公开摘要及 APK/ZIP 文件头已匿名取回核对。签名证书 SHA-256 仍为 `61fd4f1cf391cb98b53030f008aa0dd57dae4a91fac1bf3525f8db013065acaf`。
+- 未下载新 SDK/镜像或接受新许可；未使用本机 Docker；没有生成、提取或落地新的签名私钥。
+
+---
+
 # Gecko 0.4.3 顶部安全区与滚动模糊（2026-10-31）
 
 - 源码提交：`ef9ab46bb796d255c146bf66080f9ed64d92ceff`，版本 `0.4.3-gecko` / versionCode 7；沿用包名 `org.rocks.browser.geckodemo` 与固定证书，可覆盖已有 Gecko 体验版。

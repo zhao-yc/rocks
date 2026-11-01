@@ -1,5 +1,7 @@
 # Rocks Gecko 0.4.3：顶部安全区与滚动模糊
 
+此版本已在模拟器复现网页显示连接释放时的闪退，请使用 [0.4.4 修复版](https://github.com/zhao-yc/rocks/releases/download/v0.4.4-gecko/rocks-gecko-0.4.4.apk) 覆盖升级。以下保留原始发行说明。
+
 Android 10+ / ARM64，版本 `0.4.3-gecko`，versionCode 7。
 
 沿用现有 Gecko 体验版的包名和固定签名，可以直接覆盖安装，不需要卸载；请在应用菜单中确认版本为 0.4.3。

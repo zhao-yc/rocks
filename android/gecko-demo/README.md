@@ -8,6 +8,8 @@ GeckoView can release a null display before attachment or after detachment, even
 
 `assembleDebugAndroidTest` builds a small instrumentation APK without another test framework. Install it alongside the matching signed browser, then run `adb -s <serial> shell am instrument -w -r org.rocks.browser.geckodemo.test/org.rocks.geckodemo.DisplayLifecycleInstrumentation` on a compatible Android device. It exercises the real Gecko APIs for never-attached view release, release after an earlier display detach, and rejection of stale displays. A successful run prints three passed checks and `INSTRUMENTATION_CODE: -1`. This test does not replace visual acceptance on a phone.
 
+For an x86_64 emulator, explicitly select `build_emulator_apk` when manually running the Gecko workflow. After archiving the unchanged ARM64 phone APK, CI temporarily changes only the ABI filter and creates a separately named, signed `rocks-gecko-emulator-apk` artifact from the same runtime source. It downloads no system image and is never passed to the public release workflow. This avoids depending on ARM translation for Gecko's native engine/JIT during emulator visual checks. All adb commands should specify the intended device serial.
+
 ## 0.4.3 Safari-style top safe area
 
 Normal browsing now places web content below the Android status-bar/cutout safe area, including pages that declare `viewport-fit=cover`. The host consumes top and horizontal insets once; Gecko receives only the remaining CSS safe-area insets so websites do not add the same top gap again. Home, progress and error content share this layout. Website fullscreen releases the protected area and restores it on exit. The bottom toolbar and its occlusion hint remain unchanged.
