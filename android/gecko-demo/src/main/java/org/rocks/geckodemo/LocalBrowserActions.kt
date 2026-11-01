@@ -130,6 +130,8 @@ internal class PageLoadState {
     fun start() { loading = true; error = false; stopped = false }
     /** 保留停止标记，供迟到的页面结束回调识别用户取消。 */
     fun stop() { loading = false; error = false; stopped = true }
+    /** Gecko 未提供错误文档时会回退到空白页，不能据此抹掉真实加载错误。 */
+    fun isErrorFallback(url: String): Boolean = error && url == DemoPolicy.HOME
     /** 只有真实完成的网页可以写入历史；停止后的迟到回调不制造访问记录。 */
     fun finish(success: Boolean): Boolean {
         loading = false

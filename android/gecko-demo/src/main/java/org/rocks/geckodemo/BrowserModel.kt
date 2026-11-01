@@ -63,6 +63,7 @@ internal class BrowserTab(val id: Long, val session: GeckoSession, val extension
         return visited
     }
     fun failLoad() { loadState.fail(); loading = false; error = true; progress = 100 }
+    fun isErrorFallback(url: String): Boolean = loadState.isErrorFallback(url)
 }
 
 internal data class ExtensionPopup(val session: GeckoSession, val extensionId: String, val title: String)
@@ -355,6 +356,7 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
             }
             override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
                 if (tab !in tabs) return
+                if (url != null && tab.isErrorFallback(url)) return
                 if (url != null) {
                     automaticHome?.navigationRequested(tab.id, url)
                     if (tab.url != url) {
@@ -372,13 +374,18 @@ internal class BrowserModel(application: Application) : AndroidViewModel(applica
                 return newTab(null, extensionBase = tab.extensionBase)?.let { GeckoResult.fromValue(it.session) }
             }
             override fun onLoadError(session: GeckoSession, uri: String?, error: WebRequestError): GeckoResult<String>? {
-                if (tab in tabs) tab.failLoad()
+                if (tab in tabs) {
+                    // 失败导航可能没有提交位置；保留失败网址供原生重试，忽略随后引擎的空白错误回退。
+                    if (uri != null && DemoPolicy.canLoad(uri, tab.extensionBase)) tab.url = uri
+                    tab.beginDocument(); tab.failLoad()
+                    if (tab.id == selectedId) { sitePermissions.cancel(); finder.close(); files.cancelPrompts(); answerQuestion(false) }
+                }
                 return null // Never create certificate exceptions or bypass TLS errors.
             }
         }
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
-                if (tab !in tabs) return
+                if (tab !in tabs || tab.isErrorFallback(url)) return
                 automaticHome?.navigationRequested(tab.id, url)
                 tab.startLoad()
                 tab.beginDocument()

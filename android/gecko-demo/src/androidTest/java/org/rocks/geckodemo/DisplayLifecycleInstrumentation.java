@@ -16,10 +16,12 @@ import org.mozilla.geckoview.GeckoDisplay;
 /** 在真实 Android/Gecko 上验证释放契约，不用 JVM 桩替代原生 View 生命周期。 */
 public final class DisplayLifecycleInstrumentation extends Instrumentation {
     private String renderUrl;
+    private String dailyActionsUrl;
     @Override
     public void onCreate(final Bundle arguments) {
         super.onCreate(arguments);
         renderUrl = arguments == null ? null : arguments.getString("render_url");
+        dailyActionsUrl = arguments == null ? null : arguments.getString("daily_actions_url");
         start();
     }
 
@@ -28,6 +30,12 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
     public void onStart() {
         final Bundle result = new Bundle();
         try {
+            if (dailyActionsUrl != null) {
+                DailyBrowserActionsChecks.verify(this, dailyActionsUrl);
+                result.putString("stream", "日常浏览回归：末页恢复、桌面模式、程序关闭、标签上限、停止、真实失败、输入反馈、新建聚焦及标签匹配均通过\n");
+                finish(Activity.RESULT_OK, result);
+                return;
+            }
             if (renderUrl != null) {
                 verifyRenderedFrames();
                 result.putString("stream", "顶部真实绘制回归：收到至少 3 帧独立模糊纹理\n");
@@ -69,7 +77,7 @@ public final class DisplayLifecycleInstrumentation extends Instrumentation {
             result.putString("stream", "显示连接生命周期回归：3 项通过\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable failure) {
-            result.putString("stream", "显示连接生命周期回归失败：" + failure + "\n");
+            result.putString("stream", (dailyActionsUrl != null ? "日常浏览回归失败：" : "显示连接生命周期回归失败：") + failure + "\n");
             finish(Activity.RESULT_CANCELED, result);
         }
     }

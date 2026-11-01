@@ -155,4 +155,15 @@ class LocalBrowserActionsTest {
         assertFalse(load.finish(true)); assertTrue(load.error)
         load.start(); assertFalse(load.error)
     }
+
+    @Test fun engineBlankFallbackCannotEraseARealErrorButExplicitNavigationCanResetIt() {
+        val load = PageLoadState()
+        load.start(); load.fail()
+        assertTrue(load.isErrorFallback(DemoPolicy.HOME))
+        assertFalse(load.isErrorFallback("https://example.org/retry"))
+        assertFalse(load.finish(true)); assertTrue(load.error)
+        load.start()
+        assertFalse(load.isErrorFallback(DemoPolicy.HOME))
+        assertTrue(load.finish(true)); assertFalse(load.error)
+    }
 }
