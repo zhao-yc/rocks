@@ -57,7 +57,7 @@ final class BottomBackgroundChecks {
 
     private void navigate(String route) {
         instrumentation.runOnMainSync(() -> model.navigate(base + route));
-        await("页面 " + route, () -> (base + route).equals(model.getCurrent().getUrl()) && !model.getCurrent().getLoading());
+        await("页面 " + route, () -> (base + route).equals(model.getCurrent().getUrl()) && !model.getCurrent().getLoading() && !model.getCurrent().getError());
     }
 
     private void awaitColor(Integer expected) {
@@ -99,6 +99,8 @@ final class BottomBackgroundChecks {
         StringBuilder result = new StringBuilder();
         instrumentation.runOnMainSync(() -> {
             try {
+                result.append("committed=").append(model.getCurrent().getBottomDocumentCommitted())
+                        .append(";scope=").append(model.pageScope(model.getCurrent().getSession())).append(';');
                 Object bridge = model.getBottomBackground();
                 for (String name : new String[]{"port", "boundScope", "report", "clipping", "paused", "view"}) {
                     java.lang.reflect.Field field = bridge.getClass().getDeclaredField(name); field.setAccessible(true);

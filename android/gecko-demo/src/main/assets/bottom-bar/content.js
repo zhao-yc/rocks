@@ -7,6 +7,7 @@
   let port = null, timer = null, lastRun = -Infinity, lastResult = null;
   let retryTimer = null, retries = 0;
   let dirty = true, candidates = [], observing = false;
+  let selected = false;
 
   /** 解析浏览器计算后的 sRGB 颜色；不支持的颜色空间保守回退为透明。 */
   function rgba(value) {
@@ -91,7 +92,14 @@
     } catch { port = null; }
   }
 
-  function active() { return document.visibilityState === 'visible' && document.hasFocus() && !document.fullscreenElement; }
+  function active() { return selected && document.visibilityState === 'visible' && !document.fullscreenElement; }
+
+  /** Gecko 的网页焦点和原生焦点不同步；使用扩展内部的实际标签激活状态。 */
+  function refreshActivity() {
+    browser.runtime.sendMessage({ kind: 'bottom-activity' }).then(result => {
+      selected = result?.active === true; activityChanged();
+    }).catch(() => { selected = false; activityChanged(); });
+  }
 
   /** 合并事件，最多每秒检测十次；仅发送变化，不进行空闲轮询。 */
   function schedule() {
@@ -126,7 +134,8 @@
     }
   }
   window.addEventListener('scroll', schedule, { passive: true, capture: true });
-  for (const event of ['resize', 'focus', 'blur', 'pageshow', 'popstate', 'hashchange']) window.addEventListener(event, activityChanged);
+  for (const event of ['resize', 'blur', 'popstate', 'hashchange']) window.addEventListener(event, activityChanged);
+  for (const event of ['focus', 'pageshow']) window.addEventListener(event, refreshActivity);
   for (const event of ['visibilitychange', 'fullscreenchange']) document.addEventListener(event, activityChanged);
   for (const event of ['load', 'transitionend', 'animationend']) document.addEventListener(event, () => { dirty = true; schedule(); }, true);
   window.visualViewport?.addEventListener('resize', activityChanged);
@@ -137,5 +146,10 @@
     if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
     const old = port; port = null; old?.disconnect(); lastResult = null;
   });
-  activityChanged();
+  browser.runtime.onMessage.addListener((message, sender) => {
+    if (sender.id === browser.runtime.id && message?.kind === 'bottom-activity') {
+      selected = message.active === true; activityChanged();
+    }
+  });
+  refreshActivity();
 })();

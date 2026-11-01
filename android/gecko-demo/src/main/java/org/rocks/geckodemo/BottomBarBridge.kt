@@ -23,6 +23,7 @@ internal class BottomBarBridge(
     private var report: BottomBarReport? = null
     private var view: GeckoView? = null
     private var clipping = 0
+    private val geometries = mutableMapOf<GeckoSession, Pair<GeckoView, Int>>()
     private var paused = false
     private var closed = false
     var color by mutableStateOf<Int?>(null)
@@ -83,14 +84,19 @@ internal class BottomBarBridge(
 
     /** 记录当前 Gecko 几何；矩阵转换同时处理缩放、横屏和顶部安全区。 */
     fun geometry(view: GeckoView, clipping: Int) {
-        if (page(view.session ?: return) == null) return
-        this.view = view; this.clipping = clipping
+        val session = view.session ?: return
+        if (session !in sessions) return
+        // 首次布局可能早于文档提交；几何按会话缓存，上报仍由身份校验严格控制。
+        geometries[session] = view to clipping
         updateColor()
     }
 
     private fun updateColor() {
-        val currentView = view
         val session = port?.sender?.session
+        val geometry = geometries[session]
+        val currentView = geometry?.first
+        val clipping = geometry?.second ?: 0
+        this.view = currentView; this.clipping = clipping
         val currentReport = report
         if (paused || currentView == null || session == null || currentView.session !== session ||
             page(session) != boundScope || currentReport == null) { color = null; return }
@@ -113,6 +119,7 @@ internal class BottomBarBridge(
 
     fun detach(session: GeckoSession) {
         sessions.remove(session)
+        geometries.remove(session)
         if (port?.sender?.session === session) clear()
         if (view?.session === session) view = null
         extension?.let { session.webExtensionController.setMessageDelegate(it, null, "rocksBottomBackground") }

@@ -63,7 +63,7 @@ const bottomScript = readFileSync(new URL('../android/gecko-demo/src/main/assets
 
 /** 用真实脚本和可控布局/时间测试检测逻辑，不把此结果当成 Gecko 真机验收。 */
 function bottomHarness(secure = true) {
-  let now = 0, focused = true, hit = null, observerCallback;
+  let now = 0, focused = true, hit = null, observerCallback, activityListener;
   const tasks = new Map(), listeners = new Map(), reports = [], ports = [];
   let nextTimer = 0;
   const style = { position: 'static', bottom: 'auto', opacity: '1', backgroundColor: 'rgba(0, 0, 0, 0)',
@@ -80,7 +80,10 @@ function bottomHarness(secure = true) {
     elementFromPoint: (x, y) => hit === undefined ? null : hit || [...elements].reverse().find(node => {
       const r = node.getBoundingClientRect(); return node.style.visibility === 'visible' && node.style.display !== 'none' && x >= r.left && x < r.right && y >= r.top && y < r.bottom;
     }) };
-  const browser = { runtime: { connectNative: name => {
+  const browser = { runtime: { id: 'bottom-background@rocks.internal',
+    onMessage: { addListener: callback => { activityListener = callback; } },
+    sendMessage: () => ({ then(callback) { callback({ active: focused }); return { catch() {} }; } }),
+    connectNative: name => {
     assert.equal(name, 'rocksBottomBackground');
     const port = { postMessage: report => reports.push(JSON.parse(JSON.stringify(report))),
       onDisconnect: { addListener: callback => { port.disconnected = callback; } }, disconnect: () => port.disconnected?.() };
@@ -99,7 +102,11 @@ function bottomHarness(secure = true) {
     },
     event(name, event) { for (const callback of listeners.get(`${name}:${event}`) || []) callback(); },
     mutate() { observerCallback(); },
-    focus(value) { focused = value; this.event('window', value ? 'focus' : 'blur'); },
+    focus(value) {
+      focused = value;
+      activityListener({ kind: 'bottom-activity', active: value }, { id: browser.runtime.id });
+      this.event('window', value ? 'focus' : 'blur');
+    },
     occlude(value) { hit = value; },
     advance(milliseconds = 100) {
       const end = now + milliseconds;
@@ -182,4 +189,19 @@ test('内置扩展仅匹配顶层 HTTP/HTTPS，没有存储、网络或外部消
   assert.deepEqual(manifest.content_scripts[0].matches, ['http://*/*', 'https://*/*']);
   assert.deepEqual(manifest.permissions, ['geckoViewAddons', 'nativeMessaging', 'nativeMessagingFromContent']);
   assert.equal(manifest.externally_connectable, undefined);
+});
+
+test('扩展内部按标签激活通知暂停与恢复，拒绝其他扩展请求', async () => {
+  const source = readFileSync(new URL('../android/gecko-demo/src/main/assets/bottom-bar/background.js', import.meta.url), 'utf8');
+  let activated, message;
+  const notifications = [];
+  const browser = { runtime: { id: 'internal', onMessage: { addListener: callback => { message = callback; } } },
+    tabs: { onActivated: { addListener: callback => { activated = callback; } },
+      get: async id => ({ id, active: id === 1 }), sendMessage: async (id, state) => { notifications.push([id, state.active]); } } };
+  vm.runInNewContext(source, { browser });
+  assert.equal(message({ kind: 'bottom-activity' }, { id: 'other', tab: { id: 1 } }), undefined);
+  assert.equal((await message({ kind: 'bottom-activity' }, { id: 'internal', tab: { id: 1 } })).active, true);
+  assert.equal((await message({ kind: 'bottom-activity' }, { id: 'internal', tab: { id: 2 } })).active, false);
+  activated({ tabId: 2 });
+  assert.deepEqual(notifications, [[1, true], [1, false], [2, true]]);
 });
